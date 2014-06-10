@@ -54,7 +54,7 @@ func TestTwoUsers(t *testing.T) {
 	conn1.inbound <- "WHOIS nick3"
 	no_nickchan(t, conn1)
 	conn1.inbound <- "WHOIS nick2"
-	if r := <-conn1.outbound; r != ":foohost 311 nick1 nick2 foo2 someclient * :Long name2\r\n" {
+	if r := <-conn1.outbound; r != ":foohost 311 nick1 nick2 foo2 Unknown * :Long name2\r\n" {
 		t.Fatal("first WHOIS 311", r)
 	}
 	if r := <-conn1.outbound; r != ":foohost 312 nick1 nick2 foohost :foohost\r\n" {
