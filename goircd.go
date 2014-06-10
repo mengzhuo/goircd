@@ -35,9 +35,8 @@ var (
 	logdir   = flag.String("logdir", "", "Absolute path to directory for logs")
 	statedir = flag.String("statedir", "", "Absolute path to directory for states")
 
-	ssl     = flag.Bool("ssl", false, "Use SSL only.")
-	sslKey  = flag.String("ssl_key", "", "SSL keyfile.")
-	sslCert = flag.String("ssl_cert", "", "SSL certificate.")
+	tlsKey  = flag.String("tls_key", "", "TLS keyfile")
+	tlsCert = flag.String("tls_cert", "", "TLS certificate")
 
 	verbose = flag.Bool("v", false, "Enable verbose logging.")
 )
@@ -100,10 +99,10 @@ func Run() {
 	}
 
 	var listener net.Listener
-	if *ssl {
-		cert, err := tls.LoadX509KeyPair(*sslCert, *sslKey)
+	if *tlsKey != "" {
+		cert, err := tls.LoadX509KeyPair(*tlsCert, *tlsKey)
 		if err != nil {
-			log.Fatalf("Could not load SSL keys from %s and %s: %s", *sslCert, *sslKey, err)
+			log.Fatalf("Could not load TLS keys from %s and %s: %s", *tlsCert, *tlsKey, err)
 		}
 		config := tls.Config{Certificates: []tls.Certificate{cert}}
 		listener, err = tls.Listen("tcp", *bind, &config)
