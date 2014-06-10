@@ -23,6 +23,7 @@ But it has some convincing features:
 * Single executable binary
 * No configuration file, just few command line arguments
 * IPv6 out-of-box support
+* Ability to listen on TLS-capable ports
 * Optional channel logging to plain text files
 * Optional permanent channel's state saving in plain text files
   (so you can reload daemon and all channels topics and keys won't
@@ -31,7 +32,6 @@ But it has some convincing features:
 Some remarks and recommendations related to it's simplicity:
 
 * Use either nohup or similar tools to daemonize it
-* Use either crywrap or similar tools for TLS-capable connections
 * Just plain logging on stderr, without syslog support
 
 SUPPORTED IRC COMMANDS
@@ -55,6 +55,8 @@ Just execute goircd daemon. It has following optional arguments:
 * -statedir: directory where all channels states will be saved and
              loaded during startup. If omitted, then states will be
              lost after daemon termination
+* -tls_key/-tls_cert: enable TLS and specify key and certificate file
+* -verbose: increase log messages verbosity
 
 LICENCE
 
