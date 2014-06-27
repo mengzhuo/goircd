@@ -377,7 +377,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				target := strings.ToLower(cols[0])
 				for c := range daemon.clients {
 					if c.nickname == target {
-						msg = fmt.Sprintf(":%s %s %s :%s", client, command, c.nickname, cols[1])
+						msg = fmt.Sprintf(":%s %s %s %s", client, command, c.nickname, cols[1])
 						c.Msg(msg)
 						break
 					}

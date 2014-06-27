@@ -83,7 +83,7 @@ func TestTwoUsers(t *testing.T) {
 		<-conn1.outbound
 		<-conn2.outbound
 	}
-	conn1.inbound <- "PRIVMSG nick2 Hello"
+	conn1.inbound <- "PRIVMSG nick2 :Hello"
 	conn1.inbound <- "PRIVMSG #foo :world"
 	conn1.inbound <- "NOTICE #foo :world"
 	if r := <-conn2.outbound; r != ":nick1!foo1@someclient PRIVMSG nick2 :Hello\r\n" {
