@@ -158,8 +158,8 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 			return
 		}
 		nickname := cols[1]
-		for client := range daemon.clients {
-			if client.nickname == nickname {
+		for existing_client := range daemon.clients {
+			if existing_client.nickname == nickname {
 				client.ReplyParts("433", "*", nickname, "Nickname is already in use")
 				return
 			}
