@@ -46,11 +46,11 @@ func Run() {
 	events := make(chan ClientEvent)
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
-	log_sink := make(chan LogEvent)
+	logSink := make(chan LogEvent)
 	if *logdir == "" {
 		// Dummy logger
 		go func() {
-			for _ = range log_sink {
+			for _ = range logSink {
 			}
 		}()
 	} else {
@@ -58,17 +58,17 @@ func Run() {
 			log.Fatalln("Need absolute path for logdir")
 			return
 		}
-		go Logger(*logdir, log_sink)
+		go Logger(*logdir, logSink)
 		log.Println(*logdir, "logger initialized")
 	}
 
-	state_sink := make(chan StateEvent)
-	daemon := NewDaemon(*hostname, *motd, log_sink, state_sink)
+	stateSink := make(chan StateEvent)
+	daemon := NewDaemon(*hostname, *motd, logSink, stateSink)
 	daemon.Verbose = *verbose
 	if *statedir == "" {
 		// Dummy statekeeper
 		go func() {
-			for _ = range state_sink {
+			for _ = range stateSink {
 			}
 		}()
 	} else {
@@ -94,7 +94,7 @@ func Run() {
 				log.Println("Loaded state for room", room.name)
 			}
 		}
-		go StateKeeper(*statedir, state_sink)
+		go StateKeeper(*statedir, stateSink)
 		log.Println(*statedir, "statekeeper initialized")
 	}
 

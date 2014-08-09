@@ -100,22 +100,22 @@ func TestNewClient(t *testing.T) {
 	go client.Processor(sink)
 
 	event := <-sink
-	if event.event_type != EVENT_NEW {
+	if event.eventType != EventNew {
 		t.Fatal("no NEW event", event)
 	}
 	conn.inbound <- "foo"
 	event = <-sink
-	if (event.event_type != EVENT_MSG) || (event.text != "foo") {
+	if (event.eventType != EventMsg) || (event.text != "foo") {
 		t.Fatal("no first MSG", event)
 	}
 	conn.inbound <- "bar"
 	event = <-sink
-	if (event.event_type != EVENT_MSG) || (event.text != "bar") {
+	if (event.eventType != EventMsg) || (event.text != "bar") {
 		t.Fatal("no second MSG", event)
 	}
 	conn.inbound <- ""
 	event = <-sink
-	if event.event_type != EVENT_DEL {
+	if event.eventType != EventDel {
 		t.Fatal("no client termination", event)
 	}
 }

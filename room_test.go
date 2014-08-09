@@ -5,28 +5,28 @@ import (
 	"testing"
 )
 
-func no_nickchan(t *testing.T, c *TestingConn) {
+func noNickchan(t *testing.T, c *TestingConn) {
 	if r := <-c.outbound; !strings.HasPrefix(r, ":foohost 401") {
 		t.Fatal("no nick/channel", r)
 	}
 }
 
-func no_chan(t *testing.T, c *TestingConn) {
+func noChan(t *testing.T, c *TestingConn) {
 	if r := <-c.outbound; !strings.HasPrefix(r, ":foohost 403") {
 		t.Fatal("no channel", r)
 	}
 }
 
-func not_enough_params(t *testing.T, c *TestingConn) {
+func notEnoughParams(t *testing.T, c *TestingConn) {
 	if r := <-c.outbound; !strings.HasPrefix(r, ":foohost 461") {
 		t.Fatal("not enough params", r)
 	}
 }
 
 func TestTwoUsers(t *testing.T) {
-	log_sink := make(chan LogEvent, 8)
-	state_sink := make(chan StateEvent, 8)
-	daemon := NewDaemon("foohost", "", log_sink, state_sink)
+	logSink := make(chan LogEvent, 8)
+	stateSink := make(chan StateEvent, 8)
+	daemon := NewDaemon("foohost", "", logSink, stateSink)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 
@@ -50,9 +50,9 @@ func TestTwoUsers(t *testing.T) {
 	}
 
 	conn1.inbound <- "WHOIS"
-	not_enough_params(t, conn1)
+	notEnoughParams(t, conn1)
 	conn1.inbound <- "WHOIS nick3"
-	no_nickchan(t, conn1)
+	noNickchan(t, conn1)
 	conn1.inbound <- "WHOIS nick2"
 	if r := <-conn1.outbound; r != ":foohost 311 nick1 nick2 foo2 Unknown * :Long name2\r\n" {
 		t.Fatal("first WHOIS 311", r)
@@ -73,9 +73,9 @@ func TestTwoUsers(t *testing.T) {
 	}
 
 	conn1.inbound <- "WHO"
-	not_enough_params(t, conn1)
+	notEnoughParams(t, conn1)
 	conn1.inbound <- "WHO #fooroom"
-	no_chan(t, conn1)
+	noChan(t, conn1)
 
 	conn1.inbound <- "JOIN #foo"
 	conn2.inbound <- "JOIN #foo"
@@ -98,9 +98,9 @@ func TestTwoUsers(t *testing.T) {
 }
 
 func TestJoin(t *testing.T) {
-	log_sink := make(chan LogEvent, 8)
-	state_sink := make(chan StateEvent, 8)
-	daemon := NewDaemon("foohost", "", log_sink, state_sink)
+	logSink := make(chan LogEvent, 8)
+	stateSink := make(chan StateEvent, 8)
+	daemon := NewDaemon("foohost", "", logSink, stateSink)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 	conn := NewTestingConn()
@@ -113,11 +113,11 @@ func TestJoin(t *testing.T) {
 	}
 
 	conn.inbound <- "JOIN"
-	not_enough_params(t, conn)
+	notEnoughParams(t, conn)
 	conn.inbound <- "JOIN bla/bla/bla"
-	no_chan(t, conn)
+	noChan(t, conn)
 	conn.inbound <- "JOIN bla:bla:bla"
-	no_chan(t, conn)
+	noChan(t, conn)
 
 	conn.inbound <- "JOIN #foo"
 	if r := <-conn.outbound; r != ":foohost 331 nick2 #foo :No topic is set\r\n" {
@@ -132,7 +132,7 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":foohost 366 nick2 #foo :End of NAMES list\r\n" {
 		t.Fatal("no end of NAMES list", r)
 	}
-	if r := <-log_sink; (r.what != "joined") || (r.where != "#foo") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "joined") || (r.where != "#foo") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event", r)
 	}
 
@@ -146,10 +146,10 @@ func TestJoin(t *testing.T) {
 	if _, ok := daemon.rooms["#baz"]; !ok {
 		t.Fatal("#baz does not exist")
 	}
-	if r := <-log_sink; (r.what != "joined") || (r.where != "#bar") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "joined") || (r.where != "#bar") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event #bar", r)
 	}
-	if r := <-log_sink; (r.what != "joined") || (r.where != "#baz") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "joined") || (r.where != "#baz") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event #baz", r)
 	}
 
@@ -163,16 +163,16 @@ func TestJoin(t *testing.T) {
 	if daemon.rooms["#bazenc"].key != "key2" {
 		t.Fatal("no room with key2")
 	}
-	if r := <-log_sink; (r.what != "joined") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "joined") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event #barenc", r)
 	}
-	if r := <-log_sink; (r.what != "joined") || (r.where != "#bazenc") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "joined") || (r.where != "#bazenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event #bazenc", r)
 	}
-	if r := <-state_sink; (r.topic != "") || (r.where != "#barenc") || (r.key != "key1") {
+	if r := <-stateSink; (r.topic != "") || (r.where != "#barenc") || (r.key != "key1") {
 		t.Fatal("set channel key1 state", r)
 	}
-	if r := <-state_sink; (r.topic != "") || (r.where != "#bazenc") || (r.key != "key2") {
+	if r := <-stateSink; (r.topic != "") || (r.where != "#bazenc") || (r.key != "key2") {
 		t.Fatal("set channel key2 state", r)
 	}
 
@@ -183,10 +183,10 @@ func TestJoin(t *testing.T) {
 	if daemon.rooms["#barenc"].key != "" {
 		t.Fatal("removing key from #barenc")
 	}
-	if r := <-log_sink; (r.what != "removed channel key") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "removed channel key") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("removed channel key log", r)
 	}
-	if r := <-state_sink; (r.topic != "") || (r.where != "#barenc") || (r.key != "") {
+	if r := <-stateSink; (r.topic != "") || (r.where != "#barenc") || (r.key != "") {
 		t.Fatal("removed channel key state", r)
 	}
 
@@ -194,7 +194,7 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":foohost 442 #bazenc :You are not on that channel\r\n" {
 		t.Fatal("not on that channel", r)
 	}
-	if r := <-log_sink; (r.what != "left") || (r.where != "#bazenc") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "left") || (r.where != "#bazenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("left #bazenc log", r)
 	}
 
@@ -207,10 +207,10 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":nick2!foo2@someclient MODE #barenc +k newkey\r\n" {
 		t.Fatal("+k MODE setting", r)
 	}
-	if r := <-log_sink; (r.what != "set channel key to newkey") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "set channel key to newkey") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("set channel key", r)
 	}
-	if r := <-state_sink; (r.topic != "") || (r.where != "#barenc") || (r.key != "newkey") {
+	if r := <-stateSink; (r.topic != "") || (r.where != "#barenc") || (r.key != "newkey") {
 		t.Fatal("set channel newkey state", r)
 	}
 
@@ -218,10 +218,10 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":nick2!foo2@someclient TOPIC #barenc :New topic\r\n" {
 		t.Fatal("set TOPIC", r)
 	}
-	if r := <-log_sink; (r.what != "set topic to New topic") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
+	if r := <-logSink; (r.what != "set topic to New topic") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("set TOPIC log", r)
 	}
-	if r := <-state_sink; (r.topic != "New topic") || (r.where != "#barenc") || (r.key != "newkey") {
+	if r := <-stateSink; (r.topic != "New topic") || (r.where != "#barenc") || (r.key != "newkey") {
 		t.Fatal("set channel TOPIC state", r)
 	}
 

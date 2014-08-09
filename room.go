@@ -26,34 +26,34 @@ import (
 )
 
 var (
-	RE_ROOM = regexp.MustCompile("^#[^\x00\x07\x0a\x0d ,:/]{1,200}$")
+	RERoom = regexp.MustCompile("^#[^\x00\x07\x0a\x0d ,:/]{1,200}$")
 )
 
 // Sanitize room's name. It can consist of 1 to 50 ASCII symbols
 // with some exclusions. All room names will have "#" prefix.
 func RoomNameValid(name string) bool {
-	return RE_ROOM.MatchString(name)
+	return RERoom.MatchString(name)
 }
 
 type Room struct {
-	Verbose    bool
-	name       string
-	topic      string
-	key        string
-	members    map[*Client]bool
-	hostname   string
-	log_sink   chan<- LogEvent
-	state_sink chan<- StateEvent
+	Verbose   bool
+	name      string
+	topic     string
+	key       string
+	members   map[*Client]bool
+	hostname  string
+	logSink   chan<- LogEvent
+	stateSink chan<- StateEvent
 }
 
-func NewRoom(hostname, name string, log_sink chan<- LogEvent, state_sink chan<- StateEvent) *Room {
+func NewRoom(hostname, name string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Room {
 	room := Room{name: name}
 	room.members = make(map[*Client]bool)
 	room.topic = ""
 	room.key = ""
 	room.hostname = hostname
-	room.log_sink = log_sink
-	room.state_sink = state_sink
+	room.logSink = logSink
+	room.stateSink = stateSink
 	return &room
 }
 
@@ -66,9 +66,9 @@ func (room *Room) SendTopic(client *Client) {
 }
 
 // Send message to all room's subscribers, possibly excluding someone
-func (room *Room) Broadcast(msg string, client_to_ignore ...*Client) {
+func (room *Room) Broadcast(msg string, clientToIgnore ...*Client) {
 	for member := range room.members {
-		if (len(client_to_ignore) > 0) && member == client_to_ignore[0] {
+		if (len(clientToIgnore) > 0) && member == clientToIgnore[0] {
 			continue
 		}
 		member.Msg(msg)
@@ -76,22 +76,22 @@ func (room *Room) Broadcast(msg string, client_to_ignore ...*Client) {
 }
 
 func (room *Room) StateSave() {
-	room.state_sink <- StateEvent{room.name, room.topic, room.key}
+	room.stateSink <- StateEvent{room.name, room.topic, room.key}
 }
 
 func (room *Room) Processor(events <-chan ClientEvent) {
 	var client *Client
 	for event := range events {
 		client = event.client
-		switch event.event_type {
-		case EVENT_NEW:
+		switch event.eventType {
+		case EventNew:
 			room.members[client] = true
 			if room.Verbose {
 				log.Println(client, "joined", room.name)
 			}
 			room.SendTopic(client)
 			room.Broadcast(fmt.Sprintf(":%s JOIN %s", client, room.name))
-			room.log_sink <- LogEvent{room.name, client.nickname, "joined", true}
+			room.logSink <- LogEvent{room.name, client.nickname, "joined", true}
 			nicknames := []string{}
 			for member := range room.members {
 				nicknames = append(nicknames, member.nickname)
@@ -99,7 +99,7 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			sort.Strings(nicknames)
 			client.ReplyNicknamed("353", "=", room.name, strings.Join(nicknames, " "))
 			client.ReplyNicknamed("366", room.name, "End of NAMES list")
-		case EVENT_DEL:
+		case EventDel:
 			if _, subscribed := room.members[client]; !subscribed {
 				client.ReplyNicknamed("442", room.name, "You are not on that channel")
 				continue
@@ -107,8 +107,8 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			delete(room.members, client)
 			msg := fmt.Sprintf(":%s PART %s :%s", client, room.name, client.nickname)
 			room.Broadcast(msg)
-			room.log_sink <- LogEvent{room.name, client.nickname, "left", true}
-		case EVENT_TOPIC:
+			room.logSink <- LogEvent{room.name, client.nickname, "left", true}
+		case EventTopic:
 			if _, subscribed := room.members[client]; !subscribed {
 				client.ReplyParts("442", room.name, "You are not on that channel")
 				continue
@@ -120,14 +120,14 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			room.topic = strings.TrimLeft(event.text, ":")
 			msg := fmt.Sprintf(":%s TOPIC %s :%s", client, room.name, room.topic)
 			go room.Broadcast(msg)
-			room.log_sink <- LogEvent{room.name, client.nickname, "set topic to " + room.topic, true}
+			room.logSink <- LogEvent{room.name, client.nickname, "set topic to " + room.topic, true}
 			room.StateSave()
-		case EVENT_WHO:
+		case EventWho:
 			for m := range room.members {
 				client.ReplyNicknamed("352", room.name, m.username, m.conn.RemoteAddr().String(), room.hostname, m.nickname, "H", "0 "+m.realname)
 			}
 			client.ReplyNicknamed("315", room.name, "End of /WHO list")
-		case EVENT_MODE:
+		case EventMode:
 			if event.text == "" {
 				mode := "+"
 				if room.key != "" {
@@ -146,7 +146,7 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 				continue
 			}
 			var msg string
-			var msg_log string
+			var msgLog string
 			if strings.HasPrefix(event.text, "+k") {
 				cols := strings.Split(event.text, " ")
 				if len(cols) == 1 {
@@ -155,19 +155,19 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 				}
 				room.key = cols[1]
 				msg = fmt.Sprintf(":%s MODE %s +k %s", client, room.name, room.key)
-				msg_log = "set channel key to " + room.key
+				msgLog = "set channel key to " + room.key
 			} else if strings.HasPrefix(event.text, "-k") {
 				room.key = ""
 				msg = fmt.Sprintf(":%s MODE %s -k", client, room.name)
-				msg_log = "removed channel key"
+				msgLog = "removed channel key"
 			}
 			go room.Broadcast(msg)
-			room.log_sink <- LogEvent{room.name, client.nickname, msg_log, true}
+			room.logSink <- LogEvent{room.name, client.nickname, msgLog, true}
 			room.StateSave()
-		case EVENT_MSG:
+		case EventMsg:
 			sep := strings.Index(event.text, " ")
 			room.Broadcast(fmt.Sprintf(":%s %s %s :%s", client, event.text[:sep], room.name, event.text[sep+1:]), client)
-			room.log_sink <- LogEvent{room.name, client.nickname, event.text[sep+1:], false}
+			room.logSink <- LogEvent{room.name, client.nickname, event.text[sep+1:], false}
 		}
 	}
 }

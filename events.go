@@ -27,26 +27,26 @@ import (
 )
 
 const (
-	EVENT_NEW   = iota
-	EVENT_DEL   = iota
-	EVENT_MSG   = iota
-	EVENT_TOPIC = iota
-	EVENT_WHO   = iota
-	EVENT_MODE  = iota
-	FORMAT_MSG  = "[%s] <%s> %s\n"
-	FORMAT_META = "[%s] * %s %s\n"
+	EventNew   = iota
+	EventDel   = iota
+	EventMsg   = iota
+	EventTopic = iota
+	EventWho   = iota
+	EventMode  = iota
+	FormatMsg  = "[%s] <%s> %s\n"
+	FormatMeta = "[%s] * %s %s\n"
 )
 
 // Client events going from each of client
 // They can be either NEW, DEL or unparsed MSG
 type ClientEvent struct {
-	client     *Client
-	event_type int
-	text       string
+	client    *Client
+	eventType int
+	text      string
 }
 
 func (m ClientEvent) String() string {
-	return string(m.event_type) + ": " + m.client.String() + ": " + m.text
+	return string(m.eventType) + ": " + m.client.String() + ": " + m.text
 }
 
 // Logging in-room events
@@ -73,9 +73,9 @@ func Logger(logdir string, events <-chan LogEvent) {
 			continue
 		}
 		if event.meta {
-			format = FORMAT_META
+			format = FormatMeta
 		} else {
-			format = FORMAT_MSG
+			format = FormatMsg
 		}
 		_, err = fd.WriteString(fmt.Sprintf(format, time.Now(), event.who, event.what))
 		fd.Close()

@@ -29,36 +29,36 @@ import (
 )
 
 const (
-	PING_TIMEOUT    = time.Second * 180 // Max time deadline for client's unresponsiveness
-	PING_THRESHOLD  = time.Second * 90  // Max idle client's time before PING are sent
-	ALIVENESS_CHECK = time.Second * 10  // Client's aliveness check period
+	PingTimeout    = time.Second * 180 // Max time deadline for client's unresponsiveness
+	PingThreshold  = time.Second * 90  // Max idle client's time before PING are sent
+	AlivenessCheck = time.Second * 10  // Client's aliveness check period
 )
 
 var (
-	RE_NICKNAME = regexp.MustCompile("^[a-zA-Z0-9-]{1,9}$")
+	RENickname = regexp.MustCompile("^[a-zA-Z0-9-]{1,9}$")
 )
 
 type Daemon struct {
-	Verbose              bool
-	hostname             string
-	motd                 string
-	clients              map[*Client]bool
-	client_aliveness     map[*Client]*ClientAlivenessState
-	rooms                map[string]*Room
-	room_sinks           map[*Room]chan ClientEvent
-	last_aliveness_check time.Time
-	log_sink             chan<- LogEvent
-	state_sink           chan<- StateEvent
+	Verbose            bool
+	hostname           string
+	motd               string
+	clients            map[*Client]bool
+	clientAliveness    map[*Client]*ClientAlivenessState
+	rooms              map[string]*Room
+	roomSinks          map[*Room]chan ClientEvent
+	lastAlivenessCheck time.Time
+	logSink            chan<- LogEvent
+	stateSink          chan<- StateEvent
 }
 
-func NewDaemon(hostname, motd string, log_sink chan<- LogEvent, state_sink chan<- StateEvent) *Daemon {
+func NewDaemon(hostname, motd string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
 	daemon := Daemon{hostname: hostname, motd: motd}
 	daemon.clients = make(map[*Client]bool)
-	daemon.client_aliveness = make(map[*Client]*ClientAlivenessState)
+	daemon.clientAliveness = make(map[*Client]*ClientAlivenessState)
 	daemon.rooms = make(map[string]*Room)
-	daemon.room_sinks = make(map[*Room]chan ClientEvent)
-	daemon.log_sink = log_sink
-	daemon.state_sink = state_sink
+	daemon.roomSinks = make(map[*Room]chan ClientEvent)
+	daemon.logSink = logSink
+	daemon.stateSink = stateSink
 	return &daemon
 }
 
@@ -160,13 +160,13 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 			return
 		}
 		nickname := cols[1]
-		for existing_client := range daemon.clients {
-			if existing_client.nickname == nickname {
+		for existingClient := range daemon.clients {
+			if existingClient.nickname == nickname {
 				client.ReplyParts("433", "*", nickname, "Nickname is already in use")
 				return
 			}
 		}
-		if !RE_NICKNAME.MatchString(nickname) {
+		if !RENickname.MatchString(nickname) {
 			client.ReplyParts("432", "*", cols[1], "Erroneous nickname")
 			return
 		}
@@ -198,13 +198,13 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 // Register new room in Daemon. Create an object, events sink, save pointers
 // to corresponding daemon's places and start room's processor goroutine.
 func (daemon *Daemon) RoomRegister(name string) (*Room, chan<- ClientEvent) {
-	room_new := NewRoom(daemon.hostname, name, daemon.log_sink, daemon.state_sink)
-	room_new.Verbose = daemon.Verbose
-	room_sink := make(chan ClientEvent)
-	daemon.rooms[name] = room_new
-	daemon.room_sinks[room_new] = room_sink
-	go room_new.Processor(room_sink)
-	return room_new, room_sink
+	roomNew := NewRoom(daemon.hostname, name, daemon.logSink, daemon.stateSink)
+	roomNew.Verbose = daemon.Verbose
+	roomSink := make(chan ClientEvent)
+	daemon.rooms[name] = roomNew
+	daemon.roomSinks[roomNew] = roomSink
+	go roomNew.Processor(roomSink)
+	return roomNew, roomSink
 }
 
 func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
@@ -229,12 +229,12 @@ func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
 		}
 		denied := false
 		joined := false
-		for room_existing, room_sink := range daemon.room_sinks {
-			if room == room_existing.name {
-				if (room_existing.key != "") && (room_existing.key != key) {
+		for roomExisting, roomSink := range daemon.roomSinks {
+			if room == roomExisting.name {
+				if (roomExisting.key != "") && (roomExisting.key != key) {
 					denied = true
 				} else {
-					room_sink <- ClientEvent{client, EVENT_NEW, ""}
+					roomSink <- ClientEvent{client, EventNew, ""}
 					joined = true
 				}
 				break
@@ -246,12 +246,12 @@ func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
 		if denied || joined {
 			continue
 		}
-		room_new, room_sink := daemon.RoomRegister(room)
+		roomNew, roomSink := daemon.RoomRegister(room)
 		if key != "" {
-			room_new.key = key
-			room_new.StateSave()
+			roomNew.key = key
+			roomNew.StateSave()
 		}
-		room_sink <- ClientEvent{client, EVENT_NEW, ""}
+		roomSink <- ClientEvent{client, EventNew, ""}
 	}
 }
 
@@ -261,41 +261,41 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 		client := event.client
 
 		// Check for clients aliveness
-		if daemon.last_aliveness_check.Add(ALIVENESS_CHECK).Before(now) {
+		if daemon.lastAlivenessCheck.Add(AlivenessCheck).Before(now) {
 			for c := range daemon.clients {
-				aliveness, alive := daemon.client_aliveness[c]
+				aliveness, alive := daemon.clientAliveness[c]
 				if !alive {
 					continue
 				}
-				if aliveness.timestamp.Add(PING_TIMEOUT).Before(now) {
+				if aliveness.timestamp.Add(PingTimeout).Before(now) {
 					log.Println(c, "ping timeout")
 					c.conn.Close()
 					continue
 				}
-				if !aliveness.ping_sent && aliveness.timestamp.Add(PING_THRESHOLD).Before(now) {
+				if !aliveness.pingSent && aliveness.timestamp.Add(PingThreshold).Before(now) {
 					if c.registered {
 						c.Msg("PING :" + daemon.hostname)
-						aliveness.ping_sent = true
+						aliveness.pingSent = true
 					} else {
 						log.Println(c, "ping timeout")
 						c.conn.Close()
 					}
 				}
 			}
-			daemon.last_aliveness_check = now
+			daemon.lastAlivenessCheck = now
 		}
 
-		switch event.event_type {
-		case EVENT_NEW:
+		switch event.eventType {
+		case EventNew:
 			daemon.clients[client] = true
-			daemon.client_aliveness[client] = &ClientAlivenessState{ping_sent: false, timestamp: now}
-		case EVENT_DEL:
+			daemon.clientAliveness[client] = &ClientAlivenessState{pingSent: false, timestamp: now}
+		case EventDel:
 			delete(daemon.clients, client)
-			delete(daemon.client_aliveness, client)
-			for _, room_sink := range daemon.room_sinks {
-				room_sink <- event
+			delete(daemon.clientAliveness, client)
+			for _, roomSink := range daemon.roomSinks {
+				roomSink <- event
 			}
-		case EVENT_MSG:
+		case EventMsg:
 			cols := strings.SplitN(event.text, " ", 2)
 			command := strings.ToUpper(cols[0])
 			if daemon.Verbose {
@@ -303,7 +303,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			}
 			if command == "QUIT" {
 				delete(daemon.clients, client)
-				delete(daemon.client_aliveness, client)
+				delete(daemon.clientAliveness, client)
 				client.conn.Close()
 				continue
 			}
@@ -345,9 +345,9 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					continue
 				}
 				if len(cols) == 1 {
-					daemon.room_sinks[r] <- ClientEvent{client, EVENT_MODE, ""}
+					daemon.roomSinks[r] <- ClientEvent{client, EventMode, ""}
 				} else {
-					daemon.room_sinks[r] <- ClientEvent{client, EVENT_MODE, cols[1]}
+					daemon.roomSinks[r] <- ClientEvent{client, EventMode, cols[1]}
 				}
 			case "MOTD":
 				go daemon.SendMotd(client)
@@ -362,7 +362,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 						client.ReplyNoChannel(room)
 						continue
 					}
-					daemon.room_sinks[r] <- ClientEvent{client, EVENT_DEL, ""}
+					daemon.roomSinks[r] <- ClientEvent{client, EventDel, ""}
 				}
 			case "PING":
 				if len(cols) == 1 {
@@ -398,7 +398,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				if !found {
 					client.ReplyNoNickChan(target)
 				}
-				daemon.room_sinks[r] <- ClientEvent{client, EVENT_MSG, command + " " + strings.TrimLeft(cols[1], ":")}
+				daemon.roomSinks[r] <- ClientEvent{client, EventMsg, command + " " + strings.TrimLeft(cols[1], ":")}
 			case "TOPIC":
 				if len(cols) == 1 {
 					client.ReplyNotEnoughParameters("TOPIC")
@@ -416,7 +416,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				} else {
 					change = ""
 				}
-				daemon.room_sinks[r] <- ClientEvent{client, EVENT_TOPIC, change}
+				daemon.roomSinks[r] <- ClientEvent{client, EventTopic, change}
 			case "WHO":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("WHO")
@@ -428,7 +428,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					client.ReplyNoChannel(room)
 					continue
 				}
-				daemon.room_sinks[r] <- ClientEvent{client, EVENT_WHO, ""}
+				daemon.roomSinks[r] <- ClientEvent{client, EventWho, ""}
 			case "WHOIS":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("WHOIS")
@@ -441,9 +441,9 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				client.ReplyNicknamed("421", command, "Unknown command")
 			}
 		}
-		if aliveness, alive := daemon.client_aliveness[client]; alive {
+		if aliveness, alive := daemon.clientAliveness[client]; alive {
 			aliveness.timestamp = now
-			aliveness.ping_sent = false
+			aliveness.pingSent = false
 		}
 	}
 }

@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	CRLF     = "\x0d\x0a"
-	BUF_SIZE = 1380
+	CRLF    = "\x0d\x0a"
+	BufSize = 1380
 )
 
 type Client struct {
@@ -40,7 +40,7 @@ type Client struct {
 }
 
 type ClientAlivenessState struct {
-	ping_sent bool
+	pingSent  bool
 	timestamp time.Time
 }
 
@@ -56,26 +56,26 @@ func NewClient(hostname string, conn net.Conn) *Client {
 // splits messages by CRLF and send them to Daemon gorouting for processing
 // it futher. Also it can signalize that client is unavailable (disconnected).
 func (client *Client) Processor(sink chan<- ClientEvent) {
-	var buf_net []byte
+	var bufNet []byte
 	buf := make([]byte, 0)
 	log.Println(client, "New client")
-	sink <- ClientEvent{client, EVENT_NEW, ""}
+	sink <- ClientEvent{client, EventNew, ""}
 	for {
-		buf_net = make([]byte, BUF_SIZE)
-		_, err := client.conn.Read(buf_net)
+		bufNet = make([]byte, BufSize)
+		_, err := client.conn.Read(bufNet)
 		if err != nil {
 			log.Println(client, "connection lost", err)
-			sink <- ClientEvent{client, EVENT_DEL, ""}
+			sink <- ClientEvent{client, EventDel, ""}
 			break
 		}
-		buf_net = bytes.TrimRight(buf_net, "\x00")
-		buf = append(buf, buf_net...)
+		bufNet = bytes.TrimRight(bufNet, "\x00")
+		buf = append(buf, bufNet...)
 		if !bytes.HasSuffix(buf, []byte(CRLF)) {
 			continue
 		}
 		for _, msg := range bytes.Split(buf[:len(buf)-2], []byte(CRLF)) {
 			if len(msg) > 0 {
-				sink <- ClientEvent{client, EVENT_MSG, string(msg)}
+				sink <- ClientEvent{client, EventMsg, string(msg)}
 			}
 		}
 		buf = []byte{}
