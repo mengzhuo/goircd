@@ -43,6 +43,7 @@ type Daemon struct {
 	hostname             string
 	motd                 string
 	clients              map[*Client]bool
+	client_aliveness     map[*Client]*ClientAlivenessState
 	rooms                map[string]*Room
 	room_sinks           map[*Room]chan ClientEvent
 	last_aliveness_check time.Time
@@ -53,6 +54,7 @@ type Daemon struct {
 func NewDaemon(hostname, motd string, log_sink chan<- LogEvent, state_sink chan<- StateEvent) *Daemon {
 	daemon := Daemon{hostname: hostname, motd: motd}
 	daemon.clients = make(map[*Client]bool)
+	daemon.client_aliveness = make(map[*Client]*ClientAlivenessState)
 	daemon.rooms = make(map[string]*Room)
 	daemon.room_sinks = make(map[*Room]chan ClientEvent)
 	daemon.log_sink = log_sink
@@ -255,20 +257,25 @@ func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
 
 func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 	for event := range events {
+		now := time.Now()
+		client := event.client
 
 		// Check for clients aliveness
-		now := time.Now()
 		if daemon.last_aliveness_check.Add(ALIVENESS_CHECK).Before(now) {
 			for c := range daemon.clients {
-				if c.timestamp.Add(PING_TIMEOUT).Before(now) {
+				aliveness, alive := daemon.client_aliveness[c]
+				if !alive {
+					continue
+				}
+				if aliveness.timestamp.Add(PING_TIMEOUT).Before(now) {
 					log.Println(c, "ping timeout")
 					c.conn.Close()
 					continue
 				}
-				if !c.ping_sent && c.timestamp.Add(PING_THRESHOLD).Before(now) {
+				if !aliveness.ping_sent && aliveness.timestamp.Add(PING_THRESHOLD).Before(now) {
 					if c.registered {
 						c.Msg("PING :" + daemon.hostname)
-						c.ping_sent = true
+						aliveness.ping_sent = true
 					} else {
 						log.Println(c, "ping timeout")
 						c.conn.Close()
@@ -278,12 +285,13 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			daemon.last_aliveness_check = now
 		}
 
-		client := event.client
 		switch event.event_type {
 		case EVENT_NEW:
 			daemon.clients[client] = true
+			daemon.client_aliveness[client] = &ClientAlivenessState{ping_sent: false, timestamp: now}
 		case EVENT_DEL:
 			delete(daemon.clients, client)
+			delete(daemon.client_aliveness, client)
 			for _, room_sink := range daemon.room_sinks {
 				room_sink <- event
 			}
@@ -295,11 +303,12 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			}
 			if command == "QUIT" {
 				delete(daemon.clients, client)
+				delete(daemon.client_aliveness, client)
 				client.conn.Close()
 				continue
 			}
 			if !client.registered {
-				go daemon.ClientRegister(client, command, cols)
+				daemon.ClientRegister(client, command, cols)
 				continue
 			}
 			switch command {
@@ -310,7 +319,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					client.ReplyNotEnoughParameters("JOIN")
 					continue
 				}
-				go daemon.HandlerJoin(client, cols[1])
+				daemon.HandlerJoin(client, cols[1])
 			case "LIST":
 				daemon.SendList(client, cols)
 			case "LUSERS":
@@ -431,6 +440,10 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			default:
 				client.ReplyNicknamed("421", command, "Unknown command")
 			}
+		}
+		if aliveness, alive := daemon.client_aliveness[client]; alive {
+			aliveness.timestamp = now
+			aliveness.ping_sent = false
 		}
 	}
 }

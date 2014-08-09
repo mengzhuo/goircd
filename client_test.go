@@ -105,7 +105,6 @@ func TestNewClient(t *testing.T) {
 	}
 	conn.inbound <- "foo"
 	event = <-sink
-	ts1 := client.timestamp
 	if (event.event_type != EVENT_MSG) || (event.text != "foo") {
 		t.Fatal("no first MSG", event)
 	}
@@ -115,9 +114,6 @@ func TestNewClient(t *testing.T) {
 		t.Fatal("no second MSG", event)
 	}
 	conn.inbound <- ""
-	if client.timestamp.Before(ts1) || client.timestamp.Equal(ts1) {
-		t.Fatal("timestamp updating")
-	}
 	event = <-sink
 	if event.event_type != EVENT_DEL {
 		t.Fatal("no client termination", event)

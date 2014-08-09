@@ -106,7 +106,7 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			}
 			delete(room.members, client)
 			msg := fmt.Sprintf(":%s PART %s :%s", client, room.name, client.nickname)
-			go room.Broadcast(msg)
+			room.Broadcast(msg)
 			room.log_sink <- LogEvent{room.name, client.nickname, "left", true}
 		case EVENT_TOPIC:
 			if _, subscribed := room.members[client]; !subscribed {

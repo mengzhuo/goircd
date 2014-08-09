@@ -34,11 +34,14 @@ type Client struct {
 	hostname   string
 	conn       net.Conn
 	registered bool
-	ping_sent  bool
-	timestamp  time.Time
 	nickname   string
 	username   string
 	realname   string
+}
+
+type ClientAlivenessState struct {
+	ping_sent bool
+	timestamp time.Time
 }
 
 func (client Client) String() string {
@@ -65,8 +68,6 @@ func (client *Client) Processor(sink chan<- ClientEvent) {
 			sink <- ClientEvent{client, EVENT_DEL, ""}
 			break
 		}
-		client.timestamp = time.Now()
-		client.ping_sent = false
 		buf_net = bytes.TrimRight(buf_net, "\x00")
 		buf = append(buf, buf_net...)
 		if !bytes.HasSuffix(buf, []byte(CRLF)) {
