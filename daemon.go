@@ -323,7 +323,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			case "LIST":
 				daemon.SendList(client, cols)
 			case "LUSERS":
-				go daemon.SendLusers(client)
+				daemon.SendLusers(client)
 			case "MODE":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("MODE")
@@ -436,7 +436,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				}
 				cols := strings.Split(cols[1], " ")
 				nicknames := strings.Split(cols[len(cols)-1], ",")
-				go daemon.SendWhois(client, nicknames)
+				daemon.SendWhois(client, nicknames)
 			default:
 				client.ReplyNicknamed("421", command, "Unknown command")
 			}
