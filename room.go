@@ -140,6 +140,10 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 				client.Msg(fmt.Sprintf("324 %s %s %s", client.nickname, room.name, mode))
 				continue
 			}
+			if strings.HasPrefix(event.text, "b") {
+				client.ReplyNicknamed("368", room.name, "End of channel ban list")
+				continue
+			}
 			if strings.HasPrefix(event.text, "-k") || strings.HasPrefix(event.text, "+k") {
 				if _, subscribed := room.members[client]; !subscribed {
 					client.ReplyParts("442", room.name, "You are not on that channel")

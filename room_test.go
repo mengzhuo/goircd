@@ -198,8 +198,8 @@ func TestJoin(t *testing.T) {
 		t.Fatal("left #bazenc log", r)
 	}
 
-	conn.inbound <- "MODE #barenc +b"
-	if r := <-conn.outbound; r != ":foohost 472 nick2 +b :Unknown MODE flag\r\n" {
+	conn.inbound <- "MODE #barenc +i"
+	if r := <-conn.outbound; r != ":foohost 472 nick2 +i :Unknown MODE flag\r\n" {
 		t.Fatal("unknown MODE flag", r)
 	}
 
