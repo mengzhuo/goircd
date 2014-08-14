@@ -28,6 +28,7 @@ But it has some convincing features:
 * Optional permanent channel's state saving in plain text files
   (so you can reload daemon and all channels topics and keys won't
   disappear)
+* Optional ability to authenticate users by nickname↔password
 
 Some remarks and recommendations related to it's simplicity:
 
@@ -36,7 +37,7 @@ Some remarks and recommendations related to it's simplicity:
 
 SUPPORTED IRC COMMANDS
 
-* NICK/USER during registration workflow
+* PASS/NICK/USER during registration workflow
 * PING/PONGs
 * NOTICE/PRIVMSG
 * MOTD, LUSERS, WHO, WHOIS, QUIT
@@ -56,7 +57,21 @@ Just execute goircd daemon. It has following optional arguments:
              loaded during startup. If omitted, then states will be
              lost after daemon termination
 * -tls_key/-tls_cert: enable TLS and specify key and certificate file
+* -passwords: enable client authentication and specify path to
+              passwords file
 * -verbose: increase log messages verbosity
+
+AUTHENTICATION
+
+You can turn on optional client authentication by preparing passwords
+file and using the -passwords argument. Format of passwords file is:
+
+    login1:password1\n
+    login2:password2\n
+    …
+
+You can force rereading of passwords file without server interruption by
+sending HUP signal to him.
 
 LICENCE
 

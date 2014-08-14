@@ -23,17 +23,21 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 var (
-	hostname = flag.String("hostname", "localhost", "Hostname")
-	bind     = flag.String("bind", ":6667", "Address to bind to")
-	motd     = flag.String("motd", "", "Path to MOTD file")
-	logdir   = flag.String("logdir", "", "Absolute path to directory for logs")
-	statedir = flag.String("statedir", "", "Absolute path to directory for states")
+	hostname  = flag.String("hostname", "localhost", "Hostname")
+	bind      = flag.String("bind", ":6667", "Address to bind to")
+	motd      = flag.String("motd", "", "Path to MOTD file")
+	logdir    = flag.String("logdir", "", "Absolute path to directory for logs")
+	statedir  = flag.String("statedir", "", "Absolute path to directory for states")
+	passwords = flag.String("passwords", "", "Optional path to passwords file")
 
 	tlsKey  = flag.String("tls_key", "", "TLS keyfile")
 	tlsCert = flag.String("tls_cert", "", "TLS certificate")
@@ -117,6 +121,18 @@ func Run() {
 		}
 	}
 	log.Println("Listening on", *bind)
+
+	if *passwords != "" {
+		daemon.PasswordsRefresh()
+		hups := make(chan os.Signal)
+		signal.Notify(hups, syscall.SIGHUP)
+		go func() {
+			for {
+				<-hups
+				daemon.PasswordsRefresh()
+			}
+		}()
+	}
 
 	go daemon.Processor(events)
 	for {

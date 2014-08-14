@@ -37,6 +37,7 @@ type Client struct {
 	nickname   string
 	username   string
 	realname   string
+	password   string
 }
 
 type ClientAlivenessState struct {
@@ -49,7 +50,7 @@ func (client Client) String() string {
 }
 
 func NewClient(hostname string, conn net.Conn) *Client {
-	return &Client{hostname: hostname, conn: conn, nickname: "*"}
+	return &Client{hostname: hostname, conn: conn, nickname: "*", password: ""}
 }
 
 // Client processor blockingly reads everything remote client sends,
@@ -64,7 +65,6 @@ func (client *Client) Processor(sink chan<- ClientEvent) {
 		bufNet = make([]byte, BufSize)
 		_, err := client.conn.Read(bufNet)
 		if err != nil {
-			log.Println(client, "connection lost", err)
 			sink <- ClientEvent{client, EventDel, ""}
 			break
 		}

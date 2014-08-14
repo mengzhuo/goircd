@@ -46,6 +46,10 @@ type Room struct {
 	stateSink chan<- StateEvent
 }
 
+func (r Room) String() string {
+	return r.name
+}
+
 func NewRoom(hostname, name string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Room {
 	room := Room{name: name}
 	room.members = make(map[*Client]bool)

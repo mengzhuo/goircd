@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -38,6 +39,8 @@ var (
 	RENickname = regexp.MustCompile("^[a-zA-Z0-9-]{1,9}$")
 )
 
+var passwordsRefreshLock sync.Mutex
+
 type Daemon struct {
 	Verbose            bool
 	hostname           string
@@ -49,6 +52,7 @@ type Daemon struct {
 	lastAlivenessCheck time.Time
 	logSink            chan<- LogEvent
 	stateSink          chan<- StateEvent
+	passwords          map[string]string
 }
 
 func NewDaemon(hostname, motd string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
@@ -154,6 +158,12 @@ func (daemon *Daemon) SendList(client *Client, cols []string) {
 // When client finishes NICK/USER workflow, then MOTD and LUSERS are send to him.
 func (daemon *Daemon) ClientRegister(client *Client, command string, cols []string) {
 	switch command {
+	case "PASS":
+		if len(cols) == 1 || len(cols[1]) < 1 {
+			client.ReplyNotEnoughParameters("PASS")
+			return
+		}
+		client.password = cols[1]
 	case "NICK":
 		if len(cols) == 1 || len(cols[1]) < 1 {
 			client.ReplyParts("431", "No nickname given")
@@ -185,6 +195,14 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 		client.realname = strings.TrimLeft(args[3], ":")
 	}
 	if client.nickname != "*" && client.username != "" {
+		passwordsRefreshLock.Lock()
+		if daemon.passwords != nil && (client.password == "" || daemon.passwords[client.nickname] != client.password) {
+			passwordsRefreshLock.Unlock()
+			client.ReplyParts("462", "You may not register")
+			client.conn.Close()
+			return
+		}
+		passwordsRefreshLock.Unlock()
 		client.registered = true
 		client.ReplyNicknamed("001", "Hi, welcome to IRC")
 		client.ReplyNicknamed("002", "Your host is "+daemon.hostname+", running goircd")
@@ -192,6 +210,7 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 		client.ReplyNicknamed("004", daemon.hostname+" goircd o o")
 		daemon.SendLusers(client)
 		daemon.SendMotd(client)
+		log.Println(client, "logged in")
 	}
 }
 
@@ -247,6 +266,7 @@ func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
 			continue
 		}
 		roomNew, roomSink := daemon.RoomRegister(room)
+		log.Println("Room", roomNew, "created")
 		if key != "" {
 			roomNew.key = key
 			roomNew.StateSave()
@@ -302,6 +322,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				log.Println(client, "command", command)
 			}
 			if command == "QUIT" {
+				log.Println(client, "quit")
 				delete(daemon.clients, client)
 				delete(daemon.clientAliveness, client)
 				client.conn.Close()
@@ -446,4 +467,23 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			aliveness.pingSent = false
 		}
 	}
+}
+
+func (daemon *Daemon) PasswordsRefresh() {
+	contents, err := ioutil.ReadFile(*passwords)
+	if err != nil {
+		log.Fatalf("Can no read passwords file %s: %s", *passwords, err)
+		return
+	}
+	processed := make(map[string]string)
+	for _, entry := range strings.Split(string(contents), "\n") {
+		loginAndPassword := strings.Split(entry, ":")
+		if len(loginAndPassword) == 2 {
+			processed[loginAndPassword[0]] = loginAndPassword[1]
+		}
+	}
+	log.Printf("Read %d passwords", len(processed))
+	passwordsRefreshLock.Lock()
+	daemon.passwords = processed
+	passwordsRefreshLock.Unlock()
 }
