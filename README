@@ -56,10 +56,17 @@ Just execute goircd daemon. It has following optional arguments:
 * -statedir: directory where all channels states will be saved and
              loaded during startup. If omitted, then states will be
              lost after daemon termination
-* -tls_key/-tls_cert: enable TLS and specify key and certificate file
+* -tlsbind/-tlskey/-tlscert: enable TLS, specify address to listen on,
+                             certificate and key files
 * -passwords: enable client authentication and specify path to
               passwords file
 * -verbose: increase log messages verbosity
+
+TLS
+
+If you specify -bind and -tlsbind simultaneously, then you will have
+both raw and encrypted listening sockets. You can use -bind "" to
+disable raw socket.
 
 AUTHENTICATION
 

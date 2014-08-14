@@ -40,14 +40,26 @@ var (
 	statedir  = flag.String("statedir", "", "Absolute path to directory for states")
 	passwords = flag.String("passwords", "", "Optional path to passwords file")
 
-	tlsKey  = flag.String("tls_key", "", "TLS keyfile")
-	tlsCert = flag.String("tls_cert", "", "TLS certificate")
+	tlsBind = flag.String("tlsbind", "", "TLS address to bind to")
+	tlsKey  = flag.String("tlskey", "", "TLS keyfile")
+	tlsCert = flag.String("tlscert", "", "TLS certificate")
 
 	verbose = flag.Bool("v", false, "Enable verbose logging.")
 )
 
+func listenerLoop(sock net.Listener, events chan<- ClientEvent) {
+	for {
+		conn, err := sock.Accept()
+		if err != nil {
+			log.Println("Error during accepting connection", err)
+			continue
+		}
+		client := NewClient(*hostname, conn)
+		go client.Processor(events)
+	}
+}
+
 func Run() {
-	var client *Client
 	events := make(chan ClientEvent)
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
@@ -70,6 +82,7 @@ func Run() {
 	stateSink := make(chan StateEvent)
 	daemon := NewDaemon(version, *hostname, *motd, logSink, stateSink)
 	daemon.Verbose = *verbose
+	log.Println("goircd "+daemon.version+" is starting")
 	if *statedir == "" {
 		// Dummy statekeeper
 		go func() {
@@ -103,26 +116,6 @@ func Run() {
 		log.Println(*statedir, "statekeeper initialized")
 	}
 
-	var listener net.Listener
-	if *tlsKey != "" {
-		cert, err := tls.LoadX509KeyPair(*tlsCert, *tlsKey)
-		if err != nil {
-			log.Fatalf("Could not load TLS keys from %s and %s: %s", *tlsCert, *tlsKey, err)
-		}
-		config := tls.Config{Certificates: []tls.Certificate{cert}}
-		listener, err = tls.Listen("tcp", *bind, &config)
-		if err != nil {
-			log.Fatalf("Can not listen on %s: %v", *bind, err)
-		}
-	} else {
-		var err error
-		listener, err = net.Listen("tcp", *bind)
-		if err != nil {
-			log.Fatalf("Can not listen on %s: %v", *bind, err)
-		}
-	}
-	log.Println("goircd "+daemon.version+" listening on", *bind)
-
 	if *passwords != "" {
 		daemon.PasswordsRefresh()
 		hups := make(chan os.Signal)
@@ -135,16 +128,30 @@ func Run() {
 		}()
 	}
 
-	go daemon.Processor(events)
-	for {
-		conn, err := listener.Accept()
+
+	if *bind != "" {
+		listener, err := net.Listen("tcp", *bind)
 		if err != nil {
-			log.Println("Error during accepting connection", err)
-			continue
+			log.Fatalf("Can not listen on %s: %v", *bind, err)
 		}
-		client = NewClient(*hostname, conn)
-		go client.Processor(events)
+		log.Println("Raw listening on", *bind)
+		go listenerLoop(listener, events)
 	}
+	if *tlsBind != "" {
+		cert, err := tls.LoadX509KeyPair(*tlsCert, *tlsKey)
+		if err != nil {
+			log.Fatalf("Could not load TLS keys from %s and %s: %s", *tlsCert, *tlsKey, err)
+		}
+		config := tls.Config{Certificates: []tls.Certificate{cert}}
+		listenerTLS, err := tls.Listen("tcp", *tlsBind, &config)
+		if err != nil {
+			log.Fatalf("Can not listen on %s: %v", *tlsBind, err)
+		}
+		log.Println("TLS listening on", *tlsBind)
+		go listenerLoop(listenerTLS, events)
+	}
+
+	daemon.Processor(events)
 }
 
 func main() {
