@@ -25,7 +25,7 @@ import (
 )
 
 func TestRegistrationWorkflow(t *testing.T) {
-	daemon := NewDaemon("foohost", "", nil, nil)
+	daemon := NewDaemon("ver1", "foohost", "", nil, nil)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 	conn := NewTestingConn()
@@ -120,7 +120,7 @@ func TestMotd(t *testing.T) {
 
 	conn := NewTestingConn()
 	client := NewClient("foohost", conn)
-	daemon := NewDaemon("foohost", fd.Name(), nil, nil)
+	daemon := NewDaemon("ver1", "foohost", fd.Name(), nil, nil)
 
 	daemon.SendMotd(client)
 	if r := <-conn.outbound; !strings.HasPrefix(r, ":foohost 375") {

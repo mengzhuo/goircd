@@ -26,7 +26,7 @@ func notEnoughParams(t *testing.T, c *TestingConn) {
 func TestTwoUsers(t *testing.T) {
 	logSink := make(chan LogEvent, 8)
 	stateSink := make(chan StateEvent, 8)
-	daemon := NewDaemon("foohost", "", logSink, stateSink)
+	daemon := NewDaemon("ver1", "foohost", "", logSink, stateSink)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 
@@ -100,7 +100,7 @@ func TestTwoUsers(t *testing.T) {
 func TestJoin(t *testing.T) {
 	logSink := make(chan LogEvent, 8)
 	stateSink := make(chan StateEvent, 8)
-	daemon := NewDaemon("foohost", "", logSink, stateSink)
+	daemon := NewDaemon("ver1", "foohost", "", logSink, stateSink)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 	conn := NewTestingConn()

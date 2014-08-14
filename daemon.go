@@ -43,6 +43,7 @@ var passwordsRefreshLock sync.Mutex
 
 type Daemon struct {
 	Verbose            bool
+	version            string
 	hostname           string
 	motd               string
 	clients            map[*Client]bool
@@ -55,8 +56,8 @@ type Daemon struct {
 	passwords          map[string]string
 }
 
-func NewDaemon(hostname, motd string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
-	daemon := Daemon{hostname: hostname, motd: motd}
+func NewDaemon(version, hostname, motd string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
+	daemon := Daemon{version: version, hostname: hostname, motd: motd}
 	daemon.clients = make(map[*Client]bool)
 	daemon.clientAliveness = make(map[*Client]*ClientAlivenessState)
 	daemon.rooms = make(map[string]*Room)
@@ -205,7 +206,7 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 		passwordsRefreshLock.Unlock()
 		client.registered = true
 		client.ReplyNicknamed("001", "Hi, welcome to IRC")
-		client.ReplyNicknamed("002", "Your host is "+daemon.hostname+", running goircd")
+		client.ReplyNicknamed("002", "Your host is "+daemon.hostname+", running goircd "+daemon.version)
 		client.ReplyNicknamed("003", "This server was created sometime")
 		client.ReplyNicknamed("004", daemon.hostname+" goircd o o")
 		daemon.SendLusers(client)
@@ -458,6 +459,14 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				cols := strings.Split(cols[1], " ")
 				nicknames := strings.Split(cols[len(cols)-1], ",")
 				daemon.SendWhois(client, nicknames)
+			case "VERSION":
+				var debug string
+				if daemon.Verbose {
+					debug = "debug"
+				} else {
+					debug = ""
+				}
+				client.ReplyNicknamed("351", fmt.Sprintf("%s.%s %s :", daemon.version, debug, daemon.hostname))
 			default:
 				client.ReplyNicknamed("421", command, "Unknown command")
 			}

@@ -32,6 +32,7 @@ import (
 )
 
 var (
+	version   string
 	hostname  = flag.String("hostname", "localhost", "Hostname")
 	bind      = flag.String("bind", ":6667", "Address to bind to")
 	motd      = flag.String("motd", "", "Path to MOTD file")
@@ -67,7 +68,7 @@ func Run() {
 	}
 
 	stateSink := make(chan StateEvent)
-	daemon := NewDaemon(*hostname, *motd, logSink, stateSink)
+	daemon := NewDaemon(version, *hostname, *motd, logSink, stateSink)
 	daemon.Verbose = *verbose
 	if *statedir == "" {
 		// Dummy statekeeper
@@ -120,7 +121,7 @@ func Run() {
 			log.Fatalf("Can not listen on %s: %v", *bind, err)
 		}
 	}
-	log.Println("Listening on", *bind)
+	log.Println("goircd "+daemon.version+" listening on", *bind)
 
 	if *passwords != "" {
 		daemon.PasswordsRefresh()
