@@ -41,8 +41,7 @@ var (
 	passwords = flag.String("passwords", "", "Optional path to passwords file")
 
 	tlsBind = flag.String("tlsbind", "", "TLS address to bind to")
-	tlsKey  = flag.String("tlskey", "", "TLS keyfile")
-	tlsCert = flag.String("tlscert", "", "TLS certificate")
+	tlsPEM  = flag.String("tlspem", "", "Path to TLS certificat+key PEM file")
 
 	verbose = flag.Bool("v", false, "Enable verbose logging.")
 )
@@ -138,9 +137,9 @@ func Run() {
 		go listenerLoop(listener, events)
 	}
 	if *tlsBind != "" {
-		cert, err := tls.LoadX509KeyPair(*tlsCert, *tlsKey)
+		cert, err := tls.LoadX509KeyPair(*tlsPEM, *tlsPEM)
 		if err != nil {
-			log.Fatalf("Could not load TLS keys from %s and %s: %s", *tlsCert, *tlsKey, err)
+			log.Fatalf("Could not load TLS keys from %s: %s", *tlsPEM, err)
 		}
 		config := tls.Config{Certificates: []tls.Certificate{cert}}
 		listenerTLS, err := tls.Listen("tcp", *tlsBind, &config)

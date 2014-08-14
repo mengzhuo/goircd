@@ -56,8 +56,8 @@ Just execute goircd daemon. It has following optional arguments:
 * -statedir: directory where all channels states will be saved and
              loaded during startup. If omitted, then states will be
              lost after daemon termination
-* -tlsbind/-tlskey/-tlscert: enable TLS, specify address to listen on,
-                             certificate and key files
+* -tlsbind/-pem: enable TLS, specify address to listen on and path
+                 to PEM file with certificate and private key
 * -passwords: enable client authentication and specify path to
               passwords file
 * -verbose: increase log messages verbosity
