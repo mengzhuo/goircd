@@ -96,7 +96,8 @@ func (conn TestingConn) SetWriteDeadline(t time.Time) error {
 func TestNewClient(t *testing.T) {
 	conn := NewTestingConn()
 	sink := make(chan ClientEvent)
-	client := NewClient("foohost", conn)
+	host := "foohost"
+	client := NewClient(&host, conn)
 	go client.Processor(sink)
 
 	event := <-sink
@@ -123,7 +124,8 @@ func TestNewClient(t *testing.T) {
 // Test replies formatting
 func TestClientReplies(t *testing.T) {
 	conn := NewTestingConn()
-	client := NewClient("foohost", conn)
+	host := "foohost"
+	client := NewClient(&host, conn)
 	client.nickname = "мойник"
 
 	client.Reply("hello")

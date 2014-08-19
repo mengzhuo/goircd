@@ -26,14 +26,15 @@ func notEnoughParams(t *testing.T, c *TestingConn) {
 func TestTwoUsers(t *testing.T) {
 	logSink := make(chan LogEvent, 8)
 	stateSink := make(chan StateEvent, 8)
-	daemon := NewDaemon("ver1", "foohost", "", logSink, stateSink)
+	host := "foohost"
+	daemon := NewDaemon("ver1", &host, nil, nil, logSink, stateSink)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 
 	conn1 := NewTestingConn()
 	conn2 := NewTestingConn()
-	client1 := NewClient("foohost", conn1)
-	client2 := NewClient("foohost", conn2)
+	client1 := NewClient(&host, conn1)
+	client2 := NewClient(&host, conn2)
 	go client1.Processor(events)
 	go client2.Processor(events)
 
@@ -100,11 +101,12 @@ func TestTwoUsers(t *testing.T) {
 func TestJoin(t *testing.T) {
 	logSink := make(chan LogEvent, 8)
 	stateSink := make(chan StateEvent, 8)
-	daemon := NewDaemon("ver1", "foohost", "", logSink, stateSink)
+	host := "foohost"
+	daemon := NewDaemon("ver1", &host, nil, nil, logSink, stateSink)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 	conn := NewTestingConn()
-	client := NewClient("foohost", conn)
+	client := NewClient(&host, conn)
 	go client.Processor(events)
 
 	conn.inbound <- "NICK nick2\r\nUSER foo2 bar2 baz2 :Long name2\r\n"

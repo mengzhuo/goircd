@@ -31,7 +31,7 @@ const (
 )
 
 type Client struct {
-	hostname   string
+	hostname   *string
 	conn       net.Conn
 	registered bool
 	nickname   string
@@ -49,7 +49,7 @@ func (client Client) String() string {
 	return client.nickname + "!" + client.username + "@" + client.conn.RemoteAddr().String()
 }
 
-func NewClient(hostname string, conn net.Conn) *Client {
+func NewClient(hostname *string, conn net.Conn) *Client {
 	return &Client{hostname: hostname, conn: conn, nickname: "*", password: ""}
 }
 
@@ -89,7 +89,7 @@ func (client *Client) Msg(text string) {
 
 // Send message from server. It has ": servername" prefix.
 func (client *Client) Reply(text string) {
-	client.Msg(":" + client.hostname + " " + text)
+	client.Msg(":" + *client.hostname + " " + text)
 }
 
 // Send server message, concatenating all provided text parts and

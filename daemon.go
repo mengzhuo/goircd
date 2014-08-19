@@ -25,7 +25,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -39,13 +38,12 @@ var (
 	RENickname = regexp.MustCompile("^[a-zA-Z0-9-]{1,9}$")
 )
 
-var passwordsRefreshLock sync.Mutex
-
 type Daemon struct {
 	Verbose            bool
 	version            string
-	hostname           string
-	motd               string
+	hostname           *string
+	motd               *string
+	passwords          *string
 	clients            map[*Client]bool
 	clientAliveness    map[*Client]*ClientAlivenessState
 	rooms              map[string]*Room
@@ -53,11 +51,10 @@ type Daemon struct {
 	lastAlivenessCheck time.Time
 	logSink            chan<- LogEvent
 	stateSink          chan<- StateEvent
-	passwords          map[string]string
 }
 
-func NewDaemon(version, hostname, motd string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
-	daemon := Daemon{version: version, hostname: hostname, motd: motd}
+func NewDaemon(version string, hostname, motd, passwords *string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
+	daemon := Daemon{version: version, hostname: hostname, motd: motd, passwords: passwords}
 	daemon.clients = make(map[*Client]bool)
 	daemon.clientAliveness = make(map[*Client]*ClientAlivenessState)
 	daemon.rooms = make(map[string]*Room)
@@ -78,19 +75,19 @@ func (daemon *Daemon) SendLusers(client *Client) {
 }
 
 func (daemon *Daemon) SendMotd(client *Client) {
-	if len(daemon.motd) == 0 {
+	if daemon.motd == nil || *daemon.motd == "" {
 		client.ReplyNicknamed("422", "MOTD File is missing")
 		return
 	}
 
-	motd, err := ioutil.ReadFile(daemon.motd)
+	motd, err := ioutil.ReadFile(*daemon.motd)
 	if err != nil {
-		log.Printf("Can not read motd file %s: %v", daemon.motd, err)
+		log.Printf("Can not read motd file %s: %v", *daemon.motd, err)
 		client.ReplyNicknamed("422", "Error reading MOTD File")
 		return
 	}
 
-	client.ReplyNicknamed("375", "- "+daemon.hostname+" Message of the day -")
+	client.ReplyNicknamed("375", "- "+*daemon.hostname+" Message of the day -")
 	for _, s := range strings.Split(strings.Trim(string(motd), "\n"), "\n") {
 		client.ReplyNicknamed("372", "- "+string(s))
 	}
@@ -113,7 +110,7 @@ func (daemon *Daemon) SendWhois(client *Client, nicknames []string) {
 				h = "Unknown"
 			}
 			client.ReplyNicknamed("311", c.nickname, c.username, h, "*", c.realname)
-			client.ReplyNicknamed("312", c.nickname, daemon.hostname, daemon.hostname)
+			client.ReplyNicknamed("312", c.nickname, *daemon.hostname, *daemon.hostname)
 			subscriptions := []string{}
 			for _, room := range daemon.rooms {
 				for subscriber := range room.members {
@@ -196,19 +193,34 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 		client.realname = strings.TrimLeft(args[3], ":")
 	}
 	if client.nickname != "*" && client.username != "" {
-		passwordsRefreshLock.Lock()
-		if daemon.passwords != nil && (client.password == "" || daemon.passwords[client.nickname] != client.password) {
-			passwordsRefreshLock.Unlock()
-			client.ReplyParts("462", "You may not register")
-			client.conn.Close()
-			return
+		if daemon.passwords != nil && *daemon.passwords != "" {
+			if client.password == "" {
+				client.ReplyParts("462", "You may not register")
+				client.conn.Close()
+				return
+			}
+			contents, err := ioutil.ReadFile(*daemon.passwords)
+			if err != nil {
+				log.Fatalf("Can no read passwords file %s: %s", *daemon.passwords, err)
+				return
+			}
+			for _, entry := range strings.Split(string(contents), "\n") {
+				if entry == "" {
+					continue
+				}
+				if lp := strings.Split(entry, ":"); lp[0] == client.nickname && lp[1] != client.password {
+					client.ReplyParts("462", "You may not register")
+					client.conn.Close()
+					return
+				}
+			}
 		}
-		passwordsRefreshLock.Unlock()
+
 		client.registered = true
 		client.ReplyNicknamed("001", "Hi, welcome to IRC")
-		client.ReplyNicknamed("002", "Your host is "+daemon.hostname+", running goircd "+daemon.version)
+		client.ReplyNicknamed("002", "Your host is "+*daemon.hostname+", running goircd "+daemon.version)
 		client.ReplyNicknamed("003", "This server was created sometime")
-		client.ReplyNicknamed("004", daemon.hostname+" goircd o o")
+		client.ReplyNicknamed("004", *daemon.hostname+" goircd o o")
 		daemon.SendLusers(client)
 		daemon.SendMotd(client)
 		log.Println(client, "logged in")
@@ -295,7 +307,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				}
 				if !aliveness.pingSent && aliveness.timestamp.Add(PingThreshold).Before(now) {
 					if c.registered {
-						c.Msg("PING :" + daemon.hostname)
+						c.Msg("PING :" + *daemon.hostname)
 						aliveness.pingSent = true
 					} else {
 						log.Println(c, "ping timeout")
@@ -391,7 +403,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					client.ReplyNicknamed("409", "No origin specified")
 					continue
 				}
-				client.Reply(fmt.Sprintf("PONG %s :%s", daemon.hostname, cols[1]))
+				client.Reply(fmt.Sprintf("PONG %s :%s", *daemon.hostname, cols[1]))
 			case "PONG":
 				continue
 			case "NOTICE", "PRIVMSG":
@@ -466,7 +478,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				} else {
 					debug = ""
 				}
-				client.ReplyNicknamed("351", fmt.Sprintf("%s.%s %s :", daemon.version, debug, daemon.hostname))
+				client.ReplyNicknamed("351", fmt.Sprintf("%s.%s %s :", daemon.version, debug, *daemon.hostname))
 			default:
 				client.ReplyNicknamed("421", command, "Unknown command")
 			}
@@ -476,23 +488,4 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			aliveness.pingSent = false
 		}
 	}
-}
-
-func (daemon *Daemon) PasswordsRefresh() {
-	contents, err := ioutil.ReadFile(*passwords)
-	if err != nil {
-		log.Fatalf("Can no read passwords file %s: %s", *passwords, err)
-		return
-	}
-	processed := make(map[string]string)
-	for _, entry := range strings.Split(string(contents), "\n") {
-		loginAndPassword := strings.Split(entry, ":")
-		if len(loginAndPassword) == 2 {
-			processed[loginAndPassword[0]] = loginAndPassword[1]
-		}
-	}
-	log.Printf("Read %d passwords", len(processed))
-	passwordsRefreshLock.Lock()
-	daemon.passwords = processed
-	passwordsRefreshLock.Unlock()
 }

@@ -25,11 +25,12 @@ import (
 )
 
 func TestRegistrationWorkflow(t *testing.T) {
-	daemon := NewDaemon("ver1", "foohost", "", nil, nil)
+	host := "foohost"
+	daemon := NewDaemon("ver1", &host, nil, nil, nil, nil)
 	events := make(chan ClientEvent)
 	go daemon.Processor(events)
 	conn := NewTestingConn()
-	client := NewClient("foohost", conn)
+	client := NewClient(&host, conn)
 	go client.Processor(events)
 
 	conn.inbound <- "UNEXISTENT CMD" // should recieve nothing on this
@@ -119,8 +120,10 @@ func TestMotd(t *testing.T) {
 	fd.WriteString("catched\n")
 
 	conn := NewTestingConn()
-	client := NewClient("foohost", conn)
-	daemon := NewDaemon("ver1", "foohost", fd.Name(), nil, nil)
+	host := "foohost"
+	client := NewClient(&host, conn)
+	motdName := fd.Name()
+	daemon := NewDaemon("ver1", &host, &motdName, nil, nil, nil)
 
 	daemon.SendMotd(client)
 	if r := <-conn.outbound; !strings.HasPrefix(r, ":foohost 375") {

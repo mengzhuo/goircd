@@ -41,16 +41,16 @@ type Room struct {
 	topic     string
 	key       string
 	members   map[*Client]bool
-	hostname  string
+	hostname  *string
 	logSink   chan<- LogEvent
 	stateSink chan<- StateEvent
 }
 
-func (r Room) String() string {
-	return r.name
+func (room Room) String() string {
+	return room.name
 }
 
-func NewRoom(hostname, name string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Room {
+func NewRoom(hostname *string, name string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Room {
 	room := Room{name: name}
 	room.members = make(map[*Client]bool)
 	room.topic = ""
@@ -128,7 +128,7 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			room.StateSave()
 		case EventWho:
 			for m := range room.members {
-				client.ReplyNicknamed("352", room.name, m.username, m.conn.RemoteAddr().String(), room.hostname, m.nickname, "H", "0 "+m.realname)
+				client.ReplyNicknamed("352", room.name, m.username, m.conn.RemoteAddr().String(), *room.hostname, m.nickname, "H", "0 "+m.realname)
 			}
 			client.ReplyNicknamed("315", room.name, "End of /WHO list")
 		case EventMode:

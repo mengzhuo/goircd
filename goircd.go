@@ -23,12 +23,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"os"
-	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 var (
@@ -53,7 +50,7 @@ func listenerLoop(sock net.Listener, events chan<- ClientEvent) {
 			log.Println("Error during accepting connection", err)
 			continue
 		}
-		client := NewClient(*hostname, conn)
+		client := NewClient(hostname, conn)
 		go client.Processor(events)
 	}
 }
@@ -79,9 +76,9 @@ func Run() {
 	}
 
 	stateSink := make(chan StateEvent)
-	daemon := NewDaemon(version, *hostname, *motd, logSink, stateSink)
+	daemon := NewDaemon(version, hostname, motd, passwords, logSink, stateSink)
 	daemon.Verbose = *verbose
-	log.Println("goircd "+daemon.version+" is starting")
+	log.Println("goircd " + daemon.version + " is starting")
 	if *statedir == "" {
 		// Dummy statekeeper
 		go func() {
@@ -114,19 +111,6 @@ func Run() {
 		go StateKeeper(*statedir, stateSink)
 		log.Println(*statedir, "statekeeper initialized")
 	}
-
-	if *passwords != "" {
-		daemon.PasswordsRefresh()
-		hups := make(chan os.Signal)
-		signal.Notify(hups, syscall.SIGHUP)
-		go func() {
-			for {
-				<-hups
-				daemon.PasswordsRefresh()
-			}
-		}()
-	}
-
 
 	if *bind != "" {
 		listener, err := net.Listen("tcp", *bind)
