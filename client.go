@@ -38,6 +38,7 @@ type Client struct {
 	username   string
 	realname   string
 	password   string
+	away       *string
 }
 
 type ClientAlivenessState struct {

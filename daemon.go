@@ -111,6 +111,9 @@ func (daemon *Daemon) SendWhois(client *Client, nicknames []string) {
 			}
 			client.ReplyNicknamed("311", c.nickname, c.username, h, "*", c.realname)
 			client.ReplyNicknamed("312", c.nickname, *daemon.hostname, *daemon.hostname)
+			if c.away != nil {
+				client.ReplyNicknamed("301", c.nickname, *c.away)
+			}
 			subscriptions := []string{}
 			for _, room := range daemon.rooms {
 				for subscriber := range room.members {
@@ -347,7 +350,14 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 			}
 			switch command {
 			case "AWAY":
-				continue
+				if len(cols) == 1 {
+					client.away = nil
+					client.ReplyNicknamed("305", "You are no longer marked as being away")
+					continue
+				}
+				msg := strings.TrimLeft(cols[1], ":")
+				client.away = &msg
+				client.ReplyNicknamed("306", "You have been marked as being away")
 			case "JOIN":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("JOIN")
@@ -422,6 +432,9 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					if c.nickname == target {
 						msg = fmt.Sprintf(":%s %s %s %s", client, command, c.nickname, cols[1])
 						c.Msg(msg)
+						if c.away != nil {
+							client.ReplyNicknamed("301", c.nickname, *c.away)
+						}
 						break
 					}
 				}
