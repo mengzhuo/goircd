@@ -1,6 +1,6 @@
 /*
 goircd -- minimalistic simple Internet Relay Chat (IRC) server
-Copyright (C) 2014 Sergey Matveev <stargrave@stargrave.org>
+Copyright (C) 2014-2015 Sergey Matveev <stargrave@stargrave.org>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+
 package main
 
 import (

@@ -1,6 +1,6 @@
 /*
 goircd -- minimalistic simple Internet Relay Chat (IRC) server
-Copyright (C) 2014 Sergey Matveev <stargrave@stargrave.org>
+Copyright (C) 2014-2015 Sergey Matveev <stargrave@stargrave.org>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+
 package main
 
 import (
@@ -29,9 +30,12 @@ import (
 )
 
 const (
-	PingTimeout    = time.Second * 180 // Max time deadline for client's unresponsiveness
-	PingThreshold  = time.Second * 90  // Max idle client's time before PING are sent
-	AlivenessCheck = time.Second * 10  // Client's aliveness check period
+	// Max time deadline for client's unresponsiveness
+	PingTimeout = time.Second * 180
+	// Max idle client's time before PING are sent
+	PingThreshold = time.Second * 90
+	// Client's aliveness check period
+	AlivenessCheck = time.Second * 10
 )
 
 var (
@@ -54,7 +58,12 @@ type Daemon struct {
 }
 
 func NewDaemon(version string, hostname, motd, passwords *string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
-	daemon := Daemon{version: version, hostname: hostname, motd: motd, passwords: passwords}
+	daemon := Daemon{
+		version: version,
+		hostname: hostname,
+		motd: motd,
+		passwords: passwords,
+	}
 	daemon.clients = make(map[*Client]bool)
 	daemon.clientAliveness = make(map[*Client]*ClientAlivenessState)
 	daemon.rooms = make(map[string]*Room)
@@ -324,7 +333,10 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 		switch event.eventType {
 		case EventNew:
 			daemon.clients[client] = true
-			daemon.clientAliveness[client] = &ClientAlivenessState{pingSent: false, timestamp: now}
+			daemon.clientAliveness[client] = &ClientAlivenessState{
+				pingSent: false,
+				timestamp: now,
+			}
 		case EventDel:
 			delete(daemon.clients, client)
 			delete(daemon.clientAliveness, client)
@@ -445,7 +457,11 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				if !found {
 					client.ReplyNoNickChan(target)
 				}
-				daemon.roomSinks[r] <- ClientEvent{client, EventMsg, command + " " + strings.TrimLeft(cols[1], ":")}
+				daemon.roomSinks[r] <- ClientEvent{
+					client,
+					EventMsg,
+					command + " " + strings.TrimLeft(cols[1], ":"),
+				}
 			case "TOPIC":
 				if len(cols) == 1 {
 					client.ReplyNotEnoughParameters("TOPIC")
