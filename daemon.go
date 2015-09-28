@@ -180,9 +180,8 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 			return
 		}
 		nickname := cols[1]
-		if (strings.HasPrefix(nickname, ":")) {
-			nickname = strings.TrimPrefix(nickname, ":")
-		}
+		// Compatibility with some clients prepending colons to nickname
+		nickname = strings.TrimPrefix(nickname, ":")
 		for existingClient := range daemon.clients {
 			if existingClient.nickname == nickname {
 				client.ReplyParts("433", "*", nickname, "Nickname is already in use")
