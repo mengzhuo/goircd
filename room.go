@@ -125,11 +125,25 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			room.topic = strings.TrimLeft(event.text, ":")
 			msg := fmt.Sprintf(":%s TOPIC %s :%s", client, room.name, room.topic)
 			go room.Broadcast(msg)
-			room.logSink <- LogEvent{room.name, client.nickname, "set topic to " + room.topic, true}
+			room.logSink <- LogEvent{
+				room.name,
+				client.nickname,
+				"set topic to " + room.topic,
+				true,
+			}
 			room.StateSave()
 		case EventWho:
 			for m := range room.members {
-				client.ReplyNicknamed("352", room.name, m.username, m.conn.RemoteAddr().String(), *room.hostname, m.nickname, "H", "0 "+m.realname)
+				client.ReplyNicknamed(
+					"352",
+					room.name,
+					m.username,
+					m.conn.RemoteAddr().String(),
+					*room.hostname,
+					m.nickname,
+					"H",
+					"0 "+m.realname,
+				)
 			}
 			client.ReplyNicknamed("315", room.name, "End of /WHO list")
 		case EventMode:
@@ -175,8 +189,20 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 			room.StateSave()
 		case EventMsg:
 			sep := strings.Index(event.text, " ")
-			room.Broadcast(fmt.Sprintf(":%s %s %s :%s", client, event.text[:sep], room.name, event.text[sep+1:]), client)
-			room.logSink <- LogEvent{room.name, client.nickname, event.text[sep+1:], false}
+			room.Broadcast(fmt.Sprintf(
+				":%s %s %s :%s",
+				client,
+				event.text[:sep],
+				room.name,
+				event.text[sep+1:]),
+				client,
+			)
+			room.logSink <- LogEvent{
+				room.name,
+				client.nickname,
+				event.text[sep+1:],
+				false,
+			}
 		}
 	}
 }
