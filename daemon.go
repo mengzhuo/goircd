@@ -458,6 +458,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				r, found := daemon.rooms[target]
 				if !found {
 					client.ReplyNoNickChan(target)
+					continue
 				}
 				daemon.roomSinks[r] <- ClientEvent{
 					client,
