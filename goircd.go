@@ -70,7 +70,6 @@ func Run() {
 	} else {
 		if !path.IsAbs(*logdir) {
 			log.Fatalln("Need absolute path for logdir")
-			return
 		}
 		go Logger(*logdir, logSink)
 		log.Println(*logdir, "logger initialized")
