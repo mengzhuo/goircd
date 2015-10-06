@@ -47,10 +47,10 @@ func (conn *TestingConn) Read(b []byte) (n int, err error) {
 	if msg == "" {
 		return 0, conn
 	}
-	for n, bt := range []byte(msg + CRLF) {
+	for n, bt := range append([]byte(msg), CRLF...) {
 		b[n] = bt
 	}
-	return len(msg), nil
+	return len(msg)+2, nil
 }
 
 type MyAddr struct{}

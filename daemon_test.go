@@ -91,6 +91,7 @@ func TestRegistrationWorkflow(t *testing.T) {
 
 	conn.inbound <- "AWAY"
 	conn.inbound <- "UNEXISTENT CMD"
+	<-conn.outbound
 	if r := <-conn.outbound; r != ":foohost 421 meinick UNEXISTENT :Unknown command\r\n" {
 		t.Fatal("reply for unexistent command", r)
 	}

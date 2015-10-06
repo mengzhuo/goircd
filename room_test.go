@@ -56,8 +56,8 @@ func TestTwoUsers(t *testing.T) {
 	go client1.Processor(events)
 	go client2.Processor(events)
 
-	conn1.inbound <- "NICK nick1\r\nUSER foo1 bar1 baz1 :Long name1\r\n"
-	conn2.inbound <- "NICK nick2\r\nUSER foo2 bar2 baz2 :Long name2\r\n"
+	conn1.inbound <- "NICK nick1\r\nUSER foo1 bar1 baz1 :Long name1"
+	conn2.inbound <- "NICK nick2\r\nUSER foo2 bar2 baz2 :Long name2"
 	for i := 0; i < 6; i++ {
 		<-conn1.outbound
 		<-conn2.outbound
@@ -105,6 +105,7 @@ func TestTwoUsers(t *testing.T) {
 	conn1.inbound <- "PRIVMSG nick2 :Hello"
 	conn1.inbound <- "PRIVMSG #foo :world"
 	conn1.inbound <- "NOTICE #foo :world"
+	<-conn2.outbound
 	if r := <-conn2.outbound; r != ":nick1!foo1@someclient PRIVMSG nick2 :Hello\r\n" {
 		t.Fatal("first message", r)
 	}
@@ -127,7 +128,7 @@ func TestJoin(t *testing.T) {
 	client := NewClient(&host, conn)
 	go client.Processor(events)
 
-	conn.inbound <- "NICK nick2\r\nUSER foo2 bar2 baz2 :Long name2\r\n"
+	conn.inbound <- "NICK nick2\r\nUSER foo2 bar2 baz2 :Long name2"
 	for i := 0; i < 6; i++ {
 		<-conn.outbound
 	}

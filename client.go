@@ -27,8 +27,11 @@ import (
 )
 
 const (
-	CRLF    = "\x0d\x0a"
-	BufSize = 1380
+	BufSize = 1500
+)
+
+var (
+	CRLF []byte = []byte{'\x0d', '\x0a'}
 )
 
 type Client struct {
@@ -59,34 +62,41 @@ func NewClient(hostname *string, conn net.Conn) *Client {
 // splits messages by CRLF and send them to Daemon gorouting for processing
 // it futher. Also it can signalize that client is unavailable (disconnected).
 func (client *Client) Processor(sink chan<- ClientEvent) {
-	var bufNet []byte
-	buf := make([]byte, 0)
-	log.Println(client, "New client")
 	sink <- ClientEvent{client, EventNew, ""}
+	log.Println(client, "New client")
+	buf := make([]byte, BufSize*2)
+	var n int
+	var prev int
+	var i int
+	var err error
 	for {
-		bufNet = make([]byte, BufSize)
-		_, err := client.conn.Read(bufNet)
+		if prev == BufSize {
+			log.Println(client, "buffer size exceeded, kicking him")
+			sink <- ClientEvent{client, EventDel, ""}
+			client.conn.Close()
+			break
+		}
+		n, err = client.conn.Read(buf[prev:])
 		if err != nil {
 			sink <- ClientEvent{client, EventDel, ""}
 			break
 		}
-		bufNet = bytes.TrimRight(bufNet, "\x00")
-		buf = append(buf, bufNet...)
-		if !bytes.HasSuffix(buf, []byte(CRLF)) {
+		prev += n
+	CheckMore:
+		i = bytes.Index(buf[:prev], CRLF)
+		if i == -1 {
 			continue
 		}
-		for _, msg := range bytes.Split(buf[:len(buf)-2], []byte(CRLF)) {
-			if len(msg) > 0 {
-				sink <- ClientEvent{client, EventMsg, string(msg)}
-			}
-		}
-		buf = []byte{}
+		sink <- ClientEvent{client, EventMsg, string(buf[:i])}
+		copy(buf, buf[i+2:prev])
+		prev -= (i + 2)
+		goto CheckMore
 	}
 }
 
 // Send message as is with CRLF appended.
 func (client *Client) Msg(text string) {
-	client.conn.Write([]byte(text + CRLF))
+	client.conn.Write(append([]byte(text), CRLF...))
 }
 
 // Send message from server. It has ": servername" prefix.
