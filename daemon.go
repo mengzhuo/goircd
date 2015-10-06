@@ -48,7 +48,7 @@ type Daemon struct {
 	hostname           *string
 	motd               *string
 	passwords          *string
-	clients            map[*Client]bool
+	clients            map[*Client]struct{}
 	clientAliveness    map[*Client]*ClientAlivenessState
 	rooms              map[string]*Room
 	roomSinks          map[*Room]chan ClientEvent
@@ -59,12 +59,12 @@ type Daemon struct {
 
 func NewDaemon(version string, hostname, motd, passwords *string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
 	daemon := Daemon{
-		version: version,
-		hostname: hostname,
-		motd: motd,
+		version:   version,
+		hostname:  hostname,
+		motd:      motd,
 		passwords: passwords,
 	}
-	daemon.clients = make(map[*Client]bool)
+	daemon.clients = make(map[*Client]struct{})
 	daemon.clientAliveness = make(map[*Client]*ClientAlivenessState)
 	daemon.rooms = make(map[string]*Room)
 	daemon.roomSinks = make(map[*Room]chan ClientEvent)
@@ -303,8 +303,9 @@ func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
 }
 
 func (daemon *Daemon) Processor(events <-chan ClientEvent) {
+	var now time.Time
 	for event := range events {
-		now := time.Now()
+		now = time.Now()
 		client := event.client
 
 		// Check for clients aliveness
@@ -334,9 +335,9 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 
 		switch event.eventType {
 		case EventNew:
-			daemon.clients[client] = true
+			daemon.clients[client] = struct{}{}
 			daemon.clientAliveness[client] = &ClientAlivenessState{
-				pingSent: false,
+				pingSent:  false,
 				timestamp: now,
 			}
 		case EventDel:

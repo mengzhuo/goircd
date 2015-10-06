@@ -66,9 +66,12 @@ func Logger(logdir string, events <-chan LogEvent) {
 	mode := os.O_CREATE | os.O_WRONLY | os.O_APPEND
 	perm := os.FileMode(0660)
 	var format string
+	var logfile string
+	var fd *os.File
+	var err error
 	for event := range events {
-		logfile := path.Join(logdir, event.where)
-		fd, err := os.OpenFile(logfile, mode, perm)
+		logfile = path.Join(logdir, event.where)
+		fd, err = os.OpenFile(logfile, mode, perm)
 		if err != nil {
 			log.Println("Can not open logfile", logfile, err)
 			continue
@@ -96,10 +99,13 @@ type StateEvent struct {
 // Room states shows that either topic or key has been changed
 // Each room's state is written to separate file in statedir
 func StateKeeper(statedir string, events <-chan StateEvent) {
+	var fn string
+	var data string
+	var err error
 	for event := range events {
-		fn := path.Join(statedir, event.where)
-		data := event.topic + "\n" + event.key + "\n"
-		err := ioutil.WriteFile(fn, []byte(data), os.FileMode(0660))
+		fn = path.Join(statedir, event.where)
+		data = event.topic + "\n" + event.key + "\n"
+		err = ioutil.WriteFile(fn, []byte(data), os.FileMode(0660))
 		if err != nil {
 			log.Printf("Can not write statefile %s: %v", fn, err)
 		}
