@@ -42,20 +42,20 @@ USAGE
 
 Just execute goircd daemon. It has following optional arguments:
 
-* -hostname: hostname to show for client's connections
-* -bind: address to bind to (:6667 be default)
-* -motd: absolute path to MOTD file. It is reread every time MOTD is
-         requested
-* -logdir: directory where all channels messages will be saved. If
-           omitted, then no logs will be kept
-* -statedir: directory where all channels states will be saved and
-             loaded during startup. If omitted, then states will be
-             lost after daemon termination
-* -tlsbind/-pem: enable TLS, specify address to listen on and path
-                 to PEM file with certificate and private key
-* -passwords: enable client authentication and specify path to
+   -hostname: hostname to show for client's connections
+       -bind: address to bind to (:6667 by default)
+       -motd: absolute path to MOTD file. It is reread every time
+              MOTD is requested
+     -logdir: directory where all channels messages will be saved. If
+              omitted, then no logs will be kept
+   -statedir: directory where all channels states will be saved and
+              loaded during startup. If omitted, then states will be
+              lost after daemon termination
+   -tlsbind : enable TLS, specify address to listen on and path
+    -tlspem   to PEM file with certificate and private key
+  -passwords: enable client authentication and specify path to
               passwords file
-* -verbose: increase log messages verbosity
+          -v: increase verbosity
 
 TLS
 
@@ -70,7 +70,7 @@ file and using the -passwords argument. Format of passwords file is:
 
     login1:password1\n
     login2:password2\n
-    …
+    ...
 
 You can force rereading of passwords file without server interruption by
 sending HUP signal to him.
