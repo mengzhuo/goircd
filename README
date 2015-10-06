@@ -5,6 +5,7 @@ DESCRIPTION
 
 goircd is very simple IRC server, written on Go.
 It is heavily inspired by miniircd daemon written on Python.
+GoVPN is free software: see the file COPYING for copying conditions.
 It does not aim to replace full featured mass scalable IRC networks:
 
 * It can not connect to other servers. Just standalone installation
@@ -74,6 +75,21 @@ file and using the -passwords argument. Format of passwords file is:
 
 You can force rereading of passwords file without server interruption by
 sending HUP signal to him.
+
+LOG FILES
+
+Log files are not opened all the time, but only during each message
+saving. That is why you can safely rename them for rotation purposes.
+
+STATE FILES
+
+Each state file has the name equals to room's one. It contains two plain
+text lines: room's topic and room's authentication key (empty if none
+specified). For example:
+
+    % cat states/meinroom
+    This is meinroom's topic
+    secretkey
 
 LICENCE
 
