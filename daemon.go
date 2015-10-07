@@ -415,7 +415,8 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					client.ReplyNotEnoughParameters("PART")
 					continue
 				}
-				for _, room := range strings.Split(cols[1], ",") {
+				rooms := strings.Split(cols[1], " ")[0]
+				for _, room := range strings.Split(rooms, ",") {
 					r, found := daemon.rooms[room]
 					if !found {
 						client.ReplyNoChannel(room)
