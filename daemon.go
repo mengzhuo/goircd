@@ -39,7 +39,7 @@ const (
 )
 
 var (
-	RENickname = regexp.MustCompile("^[a-zA-Z0-9-]{1,9}$")
+	RENickname = regexp.MustCompile("^[a-zA-Z0-9-]{1,24}$")
 )
 
 type Daemon struct {
