@@ -73,9 +73,6 @@ file and using the -passwords argument. Format of passwords file is:
     login2:password2\n
     ...
 
-You can force rereading of passwords file without server interruption by
-sending HUP signal to him.
-
 LOG FILES
 
 Log files are not opened all the time, but only during each message
