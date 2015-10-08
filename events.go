@@ -70,7 +70,7 @@ func Logger(logdir string, events <-chan LogEvent) {
 	var fd *os.File
 	var err error
 	for event := range events {
-		logfile = path.Join(logdir, event.where)
+		logfile = path.Join(logdir, event.where + ".log")
 		fd, err = os.OpenFile(logfile, mode, perm)
 		if err != nil {
 			log.Println("Can not open logfile", logfile, err)
