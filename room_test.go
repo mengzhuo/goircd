@@ -42,17 +42,25 @@ func notEnoughParams(t *testing.T, c *TestingConn) {
 }
 
 func TestTwoUsers(t *testing.T) {
-	logSink := make(chan LogEvent, 8)
-	stateSink := make(chan StateEvent, 8)
+	logSink = make(chan LogEvent, 8)
+	stateSink = make(chan StateEvent, 8)
 	host := "foohost"
-	daemon := NewDaemon("ver1", &host, nil, nil, logSink, stateSink)
+	hostname = &host
 	events := make(chan ClientEvent)
-	go daemon.Processor(events)
+	rooms = make(map[string]*Room)
+	clients = make(map[*Client]struct{})
+	roomSinks = make(map[*Room]chan ClientEvent)
+	finished := make(chan struct{})
+	go Processor(events, finished)
+	defer func() {
+		events <- ClientEvent{eventType: EventTerm}
+		<-finished
+	}()
 
 	conn1 := NewTestingConn()
 	conn2 := NewTestingConn()
-	client1 := NewClient(&host, conn1)
-	client2 := NewClient(&host, conn2)
+	client1 := NewClient(conn1)
+	client2 := NewClient(conn2)
 	go client1.Processor(events)
 	go client2.Processor(events)
 
@@ -63,7 +71,7 @@ func TestTwoUsers(t *testing.T) {
 		<-conn2.outbound
 	}
 
-	daemon.SendLusers(client1)
+	SendLusers(client1)
 	if r := <-conn1.outbound; !strings.Contains(r, "There are 2 users") {
 		t.Fatal("LUSERS", r)
 	}
@@ -105,27 +113,40 @@ func TestTwoUsers(t *testing.T) {
 	conn1.inbound <- "PRIVMSG nick2 :Hello"
 	conn1.inbound <- "PRIVMSG #foo :world"
 	conn1.inbound <- "NOTICE #foo :world"
-	<-conn2.outbound
-	if r := <-conn2.outbound; r != ":nick1!foo1@someclient PRIVMSG nick2 :Hello\r\n" {
-		t.Fatal("first message", r)
+	m1 := <-conn2.outbound
+	m2 := <-conn2.outbound
+	mNeeded := ":nick1!foo1@someclient PRIVMSG nick2 :Hello\r\n"
+	if !(m1 == mNeeded || m2 == mNeeded) {
+		t.Fatal("first message", m1, m2)
 	}
-	if r := <-conn2.outbound; r != ":nick1!foo1@someclient PRIVMSG #foo :world\r\n" {
-		t.Fatal("second message", r)
+	if m2 == mNeeded {
+		m2 = <-conn2.outbound
 	}
-	if r := <-conn2.outbound; r != ":nick1!foo1@someclient NOTICE #foo :world\r\n" {
-		t.Fatal("third message", r)
+	if m2 != ":nick1!foo1@someclient PRIVMSG #foo :world\r\n" {
+		t.Fatal("second message", m2)
+	}
+	if m2 = <-conn2.outbound; m2 != ":nick1!foo1@someclient NOTICE #foo :world\r\n" {
+		t.Fatal("third message", m2)
 	}
 }
 
 func TestJoin(t *testing.T) {
-	logSink := make(chan LogEvent, 8)
-	stateSink := make(chan StateEvent, 8)
+	logSink = make(chan LogEvent, 8)
+	stateSink = make(chan StateEvent, 8)
 	host := "foohost"
-	daemon := NewDaemon("ver1", &host, nil, nil, logSink, stateSink)
+	hostname = &host
 	events := make(chan ClientEvent)
-	go daemon.Processor(events)
+	rooms = make(map[string]*Room)
+	clients = make(map[*Client]struct{})
+	roomSinks = make(map[*Room]chan ClientEvent)
+	finished := make(chan struct{})
+	go Processor(events, finished)
+	defer func() {
+		events <- ClientEvent{eventType: EventTerm}
+		<-finished
+	}()
 	conn := NewTestingConn()
-	client := NewClient(&host, conn)
+	client := NewClient(conn)
 	go client.Processor(events)
 
 	conn.inbound <- "NICK nick2\r\nUSER foo2 bar2 baz2 :Long name2"
@@ -161,10 +182,10 @@ func TestJoin(t *testing.T) {
 	for i := 0; i < 4*2; i++ {
 		<-conn.outbound
 	}
-	if _, ok := daemon.rooms["#bar"]; !ok {
+	if _, ok := rooms["#bar"]; !ok {
 		t.Fatal("#bar does not exist")
 	}
-	if _, ok := daemon.rooms["#baz"]; !ok {
+	if _, ok := rooms["#baz"]; !ok {
 		t.Fatal("#baz does not exist")
 	}
 	if r := <-logSink; (r.what != "joined") || (r.where != "#bar") || (r.who != "nick2") || (r.meta != true) {
@@ -178,10 +199,10 @@ func TestJoin(t *testing.T) {
 	for i := 0; i < 4*2; i++ {
 		<-conn.outbound
 	}
-	if daemon.rooms["#barenc"].key != "key1" {
+	if *rooms["#barenc"].key != "key1" {
 		t.Fatal("no room with key1")
 	}
-	if daemon.rooms["#bazenc"].key != "key2" {
+	if *rooms["#bazenc"].key != "key2" {
 		t.Fatal("no room with key2")
 	}
 	if r := <-logSink; (r.what != "joined") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
@@ -201,7 +222,7 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":nick2!foo2@someclient MODE #barenc -k\r\n" {
 		t.Fatal("remove #barenc key", r)
 	}
-	if daemon.rooms["#barenc"].key != "" {
+	if rooms["#barenc"].key != nil {
 		t.Fatal("removing key from #barenc")
 	}
 	if r := <-logSink; (r.what != "removed channel key") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
@@ -253,5 +274,4 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":foohost 315 nick2 #barenc :End of /WHO list\r\n" {
 		t.Fatal("end of WHO", r)
 	}
-
 }

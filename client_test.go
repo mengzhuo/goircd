@@ -19,78 +19,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
-	"net"
 	"testing"
-	"time"
 )
-
-// Testing network connection that satisfies net.Conn interface
-// Can send predefined messages and store all written ones
-type TestingConn struct {
-	inbound  chan string
-	outbound chan string
-	closed   bool
-}
-
-func NewTestingConn() *TestingConn {
-	inbound := make(chan string, 8)
-	outbound := make(chan string, 8)
-	return &TestingConn{inbound: inbound, outbound: outbound}
-}
-
-func (conn TestingConn) Error() string {
-	return "i am finished"
-}
-
-func (conn *TestingConn) Read(b []byte) (n int, err error) {
-	msg := <-conn.inbound
-	if msg == "" {
-		return 0, conn
-	}
-	for n, bt := range append([]byte(msg), CRLF...) {
-		b[n] = bt
-	}
-	return len(msg)+2, nil
-}
-
-type MyAddr struct{}
-
-func (a MyAddr) String() string {
-	return "someclient"
-}
-func (a MyAddr) Network() string {
-	return "somenet"
-}
-
-func (conn *TestingConn) Write(b []byte) (n int, err error) {
-	conn.outbound <- string(b)
-	return len(b), nil
-}
-
-func (conn *TestingConn) Close() error {
-	conn.closed = true
-	return nil
-}
-
-func (conn TestingConn) LocalAddr() net.Addr {
-	return nil
-}
-
-func (conn TestingConn) RemoteAddr() net.Addr {
-	return MyAddr{}
-}
-
-func (conn TestingConn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (conn TestingConn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (conn TestingConn) SetWriteDeadline(t time.Time) error {
-	return nil
-}
 
 // New client creation test. It must send an event about new client,
 // two predefined messages from it and deletion one
@@ -98,7 +28,8 @@ func TestNewClient(t *testing.T) {
 	conn := NewTestingConn()
 	sink := make(chan ClientEvent)
 	host := "foohost"
-	client := NewClient(&host, conn)
+	hostname = &host
+	client := NewClient(conn)
 	go client.Processor(sink)
 
 	event := <-sink
@@ -126,8 +57,10 @@ func TestNewClient(t *testing.T) {
 func TestClientReplies(t *testing.T) {
 	conn := NewTestingConn()
 	host := "foohost"
-	client := NewClient(&host, conn)
-	client.nickname = "мойник"
+	hostname = &host
+	client := NewClient(conn)
+	nickname := "мойник"
+	client.nickname = &nickname
 
 	client.Reply("hello")
 	if r := <-conn.outbound; r != ":foohost hello\r\n" {

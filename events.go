@@ -34,8 +34,15 @@ const (
 	EventTopic = iota
 	EventWho   = iota
 	EventMode  = iota
+	EventTerm  = iota
+	EventTick  = iota
 	FormatMsg  = "[%s] <%s> %s\n"
 	FormatMeta = "[%s] * %s %s\n"
+)
+
+var (
+	logSink   chan LogEvent   = make(chan LogEvent)
+	stateSink chan StateEvent = make(chan StateEvent)
 )
 
 // Client events going from each of client
@@ -70,7 +77,7 @@ func Logger(logdir string, events <-chan LogEvent) {
 	var fd *os.File
 	var err error
 	for event := range events {
-		logfile = path.Join(logdir, event.where + ".log")
+		logfile = path.Join(logdir, event.where+".log")
 		fd, err = os.OpenFile(logfile, mode, perm)
 		if err != nil {
 			log.Println("Can not open logfile", logfile, err)

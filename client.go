@@ -23,11 +23,13 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	BufSize = 1500
+	BufSize   = 1500
+	MaxOutBuf = 1 << 12
 )
 
 var (
@@ -35,35 +37,60 @@ var (
 )
 
 type Client struct {
-	hostname   *string
-	conn       net.Conn
-	registered bool
-	nickname   string
-	username   string
-	realname   string
-	password   string
-	away       *string
+	conn          net.Conn
+	registered    bool
+	nickname      *string
+	username      *string
+	realname      *string
+	password      *string
+	away          *string
+	recvTimestamp time.Time
+	sendTimestamp time.Time
+	outBuf        chan string
+	alive         bool
+	sync.Mutex
 }
 
-type ClientAlivenessState struct {
-	pingSent  bool
-	timestamp time.Time
+func (c Client) String() string {
+	return *c.nickname + "!" + *c.username + "@" + c.conn.RemoteAddr().String()
 }
 
-func (client Client) String() string {
-	return client.nickname + "!" + client.username + "@" + client.conn.RemoteAddr().String()
+func NewClient(conn net.Conn) *Client {
+	nickname := "*"
+	username := ""
+	c := Client{
+		conn:          conn,
+		nickname:      &nickname,
+		username:      &username,
+		recvTimestamp: time.Now(),
+		sendTimestamp: time.Now(),
+		alive:         true,
+		outBuf:        make(chan string, MaxOutBuf),
+	}
+	go c.MsgSender()
+	return &c
 }
 
-func NewClient(hostname *string, conn net.Conn) *Client {
-	return &Client{hostname: hostname, conn: conn, nickname: "*", password: ""}
+func (c *Client) SetDead() {
+	close(c.outBuf)
+	c.alive = false
+}
+
+func (c *Client) Close() {
+	c.Lock()
+	c.conn.Close()
+	if c.alive {
+		c.SetDead()
+	}
+	c.Unlock()
 }
 
 // Client processor blockingly reads everything remote client sends,
 // splits messages by CRLF and send them to Daemon gorouting for processing
 // it futher. Also it can signalize that client is unavailable (disconnected).
-func (client *Client) Processor(sink chan<- ClientEvent) {
-	sink <- ClientEvent{client, EventNew, ""}
-	log.Println(client, "New client")
+func (c *Client) Processor(sink chan ClientEvent) {
+	sink <- ClientEvent{c, EventNew, ""}
+	log.Println(c, "New client")
 	buf := make([]byte, BufSize*2)
 	var n int
 	var prev int
@@ -71,14 +98,11 @@ func (client *Client) Processor(sink chan<- ClientEvent) {
 	var err error
 	for {
 		if prev == BufSize {
-			log.Println(client, "buffer size exceeded, kicking him")
-			sink <- ClientEvent{client, EventDel, ""}
-			client.conn.Close()
+			log.Println(c, "input buffer size exceeded, kicking him")
 			break
 		}
-		n, err = client.conn.Read(buf[prev:])
+		n, err = c.conn.Read(buf[prev:])
 		if err != nil {
-			sink <- ClientEvent{client, EventDel, ""}
 			break
 		}
 		prev += n
@@ -87,50 +111,69 @@ func (client *Client) Processor(sink chan<- ClientEvent) {
 		if i == -1 {
 			continue
 		}
-		sink <- ClientEvent{client, EventMsg, string(buf[:i])}
+		sink <- ClientEvent{c, EventMsg, string(buf[:i])}
 		copy(buf, buf[i+2:prev])
 		prev -= (i + 2)
 		goto CheckMore
 	}
+	c.Close()
+	sink <- ClientEvent{c, EventDel, ""}
+}
+
+func (c *Client) MsgSender() {
+	for msg := range c.outBuf {
+		c.conn.Write(append([]byte(msg), CRLF...))
+	}
 }
 
 // Send message as is with CRLF appended.
-func (client *Client) Msg(text string) {
-	client.conn.Write(append([]byte(text), CRLF...))
+func (c *Client) Msg(text string) {
+	c.Lock()
+	defer c.Unlock()
+	if !c.alive {
+		return
+	}
+	if len(c.outBuf) == MaxOutBuf {
+		log.Println(c, "output buffer size exceeded, kicking him")
+		go c.Close()
+		c.SetDead()
+		return
+	}
+	c.outBuf <- text
 }
 
 // Send message from server. It has ": servername" prefix.
-func (client *Client) Reply(text string) {
-	client.Msg(":" + *client.hostname + " " + text)
+func (c *Client) Reply(text string) {
+	c.Msg(":" + *hostname + " " + text)
 }
 
 // Send server message, concatenating all provided text parts and
 // prefix the last one with ":".
-func (client *Client) ReplyParts(code string, text ...string) {
+func (c *Client) ReplyParts(code string, text ...string) {
 	parts := []string{code}
 	for _, t := range text {
 		parts = append(parts, t)
 	}
 	parts[len(parts)-1] = ":" + parts[len(parts)-1]
-	client.Reply(strings.Join(parts, " "))
+	c.Reply(strings.Join(parts, " "))
 }
 
 // Send nicknamed server message. After servername it always has target
 // client's nickname. The last part is prefixed with ":".
-func (client *Client) ReplyNicknamed(code string, text ...string) {
-	client.ReplyParts(code, append([]string{client.nickname}, text...)...)
+func (c *Client) ReplyNicknamed(code string, text ...string) {
+	c.ReplyParts(code, append([]string{*c.nickname}, text...)...)
 }
 
 // Reply "461 not enough parameters" error for given command.
-func (client *Client) ReplyNotEnoughParameters(command string) {
-	client.ReplyNicknamed("461", command, "Not enough parameters")
+func (c *Client) ReplyNotEnoughParameters(command string) {
+	c.ReplyNicknamed("461", command, "Not enough parameters")
 }
 
 // Reply "403 no such channel" error for specified channel.
-func (client *Client) ReplyNoChannel(channel string) {
-	client.ReplyNicknamed("403", channel, "No such channel")
+func (c *Client) ReplyNoChannel(channel string) {
+	c.ReplyNicknamed("403", channel, "No such channel")
 }
 
-func (client *Client) ReplyNoNickChan(channel string) {
-	client.ReplyNicknamed("401", channel, "No such nick/channel")
+func (c *Client) ReplyNoNickChan(channel string) {
+	c.ReplyNicknamed("401", channel, "No such nick/channel")
 }

@@ -37,21 +37,19 @@ var (
 	logdir    = flag.String("logdir", "", "Absolute path to directory for logs")
 	statedir  = flag.String("statedir", "", "Absolute path to directory for states")
 	passwords = flag.String("passwords", "", "Optional path to passwords file")
-
-	tlsBind = flag.String("tlsbind", "", "TLS address to bind to")
-	tlsPEM  = flag.String("tlspem", "", "Path to TLS certificat+key PEM file")
-
-	verbose = flag.Bool("v", false, "Enable verbose logging.")
+	tlsBind   = flag.String("tlsbind", "", "TLS address to bind to")
+	tlsPEM    = flag.String("tlspem", "", "Path to TLS certificat+key PEM file")
+	verbose   = flag.Bool("v", false, "Enable verbose logging.")
 )
 
-func listenerLoop(sock net.Listener, events chan<- ClientEvent) {
+func listenerLoop(sock net.Listener, events chan ClientEvent) {
 	for {
 		conn, err := sock.Accept()
 		if err != nil {
 			log.Println("Error during accepting connection", err)
 			continue
 		}
-		client := NewClient(hostname, conn)
+		client := NewClient(conn)
 		go client.Processor(events)
 	}
 }
@@ -60,7 +58,6 @@ func Run() {
 	events := make(chan ClientEvent)
 	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 
-	logSink := make(chan LogEvent)
 	if *logdir == "" {
 		// Dummy logger
 		go func() {
@@ -75,10 +72,7 @@ func Run() {
 		log.Println(*logdir, "logger initialized")
 	}
 
-	stateSink := make(chan StateEvent)
-	daemon := NewDaemon(version, hostname, motd, passwords, logSink, stateSink)
-	daemon.Verbose = *verbose
-	log.Println("goircd " + daemon.version + " is starting")
+	log.Println("goircd " + version + " is starting")
 	if *statedir == "" {
 		// Dummy statekeeper
 		go func() {
@@ -98,14 +92,14 @@ func Run() {
 			if err != nil {
 				log.Fatalf("Can not read state %s: %v", state, err)
 			}
-			room, _ := daemon.RoomRegister(path.Base(state))
+			room, _ := RoomRegister(path.Base(state))
 			contents := strings.Split(string(buf), "\n")
 			if len(contents) < 2 {
-				log.Printf("State corrupted for %s: %q", room.name, contents)
+				log.Printf("State corrupted for %s: %q", *room.name, contents)
 			} else {
-				room.topic = contents[0]
-				room.key = contents[1]
-				log.Println("Loaded state for room", room.name)
+				room.topic = &contents[0]
+				room.key = &contents[1]
+				log.Println("Loaded state for room", *room.name)
 			}
 		}
 		go StateKeeper(*statedir, stateSink)
@@ -133,8 +127,7 @@ func Run() {
 		log.Println("TLS listening on", *tlsBind)
 		go listenerLoop(listenerTLS, events)
 	}
-
-	daemon.Processor(events)
+	Processor(events, make(chan struct{}))
 }
 
 func main() {

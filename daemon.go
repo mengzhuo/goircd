@@ -26,56 +26,28 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	// Max time deadline for client's unresponsiveness
+	// Max deadline time of client's unresponsiveness
 	PingTimeout = time.Second * 180
 	// Max idle client's time before PING are sent
 	PingThreshold = time.Second * 90
-	// Client's aliveness check period
-	AlivenessCheck = time.Second * 10
 )
 
 var (
 	RENickname = regexp.MustCompile("^[a-zA-Z0-9-]{1,24}$")
+
+	roomsGroup sync.WaitGroup
+
+	clients map[*Client]struct{} = make(map[*Client]struct{})
 )
 
-type Daemon struct {
-	Verbose            bool
-	version            string
-	hostname           *string
-	motd               *string
-	passwords          *string
-	clients            map[*Client]struct{}
-	clientAliveness    map[*Client]*ClientAlivenessState
-	rooms              map[string]*Room
-	roomSinks          map[*Room]chan ClientEvent
-	lastAlivenessCheck time.Time
-	logSink            chan<- LogEvent
-	stateSink          chan<- StateEvent
-}
-
-func NewDaemon(version string, hostname, motd, passwords *string, logSink chan<- LogEvent, stateSink chan<- StateEvent) *Daemon {
-	daemon := Daemon{
-		version:   version,
-		hostname:  hostname,
-		motd:      motd,
-		passwords: passwords,
-	}
-	daemon.clients = make(map[*Client]struct{})
-	daemon.clientAliveness = make(map[*Client]*ClientAlivenessState)
-	daemon.rooms = make(map[string]*Room)
-	daemon.roomSinks = make(map[*Room]chan ClientEvent)
-	daemon.logSink = logSink
-	daemon.stateSink = stateSink
-	return &daemon
-}
-
-func (daemon *Daemon) SendLusers(client *Client) {
+func SendLusers(client *Client) {
 	lusers := 0
-	for client := range daemon.clients {
+	for client := range clients {
 		if client.registered {
 			lusers++
 		}
@@ -83,79 +55,87 @@ func (daemon *Daemon) SendLusers(client *Client) {
 	client.ReplyNicknamed("251", fmt.Sprintf("There are %d users and 0 invisible on 1 servers", lusers))
 }
 
-func (daemon *Daemon) SendMotd(client *Client) {
-	if daemon.motd == nil || *daemon.motd == "" {
+func SendMotd(client *Client) {
+	if motd == nil {
 		client.ReplyNicknamed("422", "MOTD File is missing")
 		return
 	}
-
-	motd, err := ioutil.ReadFile(*daemon.motd)
+	motdText, err := ioutil.ReadFile(*motd)
 	if err != nil {
-		log.Printf("Can not read motd file %s: %v", *daemon.motd, err)
+		log.Printf("Can not read motd file %s: %v", *motd, err)
 		client.ReplyNicknamed("422", "Error reading MOTD File")
 		return
 	}
-
-	client.ReplyNicknamed("375", "- "+*daemon.hostname+" Message of the day -")
-	for _, s := range strings.Split(strings.Trim(string(motd), "\n"), "\n") {
-		client.ReplyNicknamed("372", "- "+string(s))
+	client.ReplyNicknamed("375", "- "+*hostname+" Message of the day -")
+	for _, s := range strings.Split(strings.Trim(string(motdText), "\n"), "\n") {
+		client.ReplyNicknamed("372", "- "+s)
 	}
 	client.ReplyNicknamed("376", "End of /MOTD command")
 }
 
-func (daemon *Daemon) SendWhois(client *Client, nicknames []string) {
+func SendWhois(client *Client, nicknames []string) {
+	var c *Client
+	var hostPort string
+	var err error
+	var subscriptions []string
+	var room *Room
+	var subscriber *Client
 	for _, nickname := range nicknames {
 		nickname = strings.ToLower(nickname)
-		found := false
-		for c := range daemon.clients {
-			if strings.ToLower(c.nickname) != nickname {
-				continue
+		for c = range clients {
+			if strings.ToLower(*c.nickname) == nickname {
+				goto Found
 			}
-			found = true
-			h := c.conn.RemoteAddr().String()
-			h, _, err := net.SplitHostPort(h)
-			if err != nil {
-				log.Printf("Can't parse RemoteAddr %q: %v", h, err)
-				h = "Unknown"
-			}
-			client.ReplyNicknamed("311", c.nickname, c.username, h, "*", c.realname)
-			client.ReplyNicknamed("312", c.nickname, *daemon.hostname, *daemon.hostname)
-			if c.away != nil {
-				client.ReplyNicknamed("301", c.nickname, *c.away)
-			}
-			subscriptions := []string{}
-			for _, room := range daemon.rooms {
-				for subscriber := range room.members {
-					if subscriber.nickname == nickname {
-						subscriptions = append(subscriptions, room.name)
-					}
+		}
+		client.ReplyNoNickChan(nickname)
+		continue
+	Found:
+		hostPort, _, err = net.SplitHostPort(c.conn.RemoteAddr().String())
+		if err != nil {
+			log.Printf("Can't parse RemoteAddr %q: %v", hostPort, err)
+			hostPort = "Unknown"
+		}
+		client.ReplyNicknamed("311", *c.nickname, *c.username, hostPort, "*", *c.realname)
+		client.ReplyNicknamed("312", *c.nickname, *hostname, *hostname)
+		if c.away != nil {
+			client.ReplyNicknamed("301", *c.nickname, *c.away)
+		}
+		subscriptions = make([]string, 0)
+		for _, room = range rooms {
+			for subscriber = range room.members {
+				if *subscriber.nickname == nickname {
+					subscriptions = append(subscriptions, *room.name)
 				}
 			}
-			sort.Strings(subscriptions)
-			client.ReplyNicknamed("319", c.nickname, strings.Join(subscriptions, " "))
-			client.ReplyNicknamed("318", c.nickname, "End of /WHOIS list")
 		}
-		if !found {
-			client.ReplyNoNickChan(nickname)
-		}
+		sort.Strings(subscriptions)
+		client.ReplyNicknamed("319", *c.nickname, strings.Join(subscriptions, " "))
+		client.ReplyNicknamed("318", *c.nickname, "End of /WHOIS list")
 	}
 }
 
-func (daemon *Daemon) SendList(client *Client, cols []string) {
-	var rooms []string
+func SendList(client *Client, cols []string) {
+	var rs []string
+	var r string
 	if (len(cols) > 1) && (cols[1] != "") {
-		rooms = strings.Split(strings.Split(cols[1], " ")[0], ",")
+		rs = strings.Split(strings.Split(cols[1], " ")[0], ",")
 	} else {
-		rooms = []string{}
-		for room := range daemon.rooms {
-			rooms = append(rooms, room)
+		rs = make([]string, 0)
+		for r = range rooms {
+			rs = append(rs, r)
 		}
 	}
-	sort.Strings(rooms)
-	for _, room := range rooms {
-		r, found := daemon.rooms[room]
-		if found {
-			client.ReplyNicknamed("322", room, fmt.Sprintf("%d", len(r.members)), r.topic)
+	sort.Strings(rs)
+	var room *Room
+	var found bool
+	for _, r = range rs {
+		if room, found = rooms[r]; found {
+			client.ReplyNicknamed(
+				"322",
+				r,
+				fmt.Sprintf("%d", len(room.members)),
+				*room.topic,
+			)
 		}
 	}
 	client.ReplyNicknamed("323", "End of /LIST")
@@ -166,14 +146,14 @@ func (daemon *Daemon) SendList(client *Client, cols []string) {
 // * only QUIT, NICK and USER commands are processed
 // * other commands are quietly ignored
 // When client finishes NICK/USER workflow, then MOTD and LUSERS are send to him.
-func (daemon *Daemon) ClientRegister(client *Client, command string, cols []string) {
-	switch command {
+func ClientRegister(client *Client, cmd string, cols []string) {
+	switch cmd {
 	case "PASS":
 		if len(cols) == 1 || len(cols[1]) < 1 {
 			client.ReplyNotEnoughParameters("PASS")
 			return
 		}
-		client.password = cols[1]
+		client.password = &cols[1]
 	case "NICK":
 		if len(cols) == 1 || len(cols[1]) < 1 {
 			client.ReplyParts("431", "No nickname given")
@@ -182,8 +162,8 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 		nickname := cols[1]
 		// Compatibility with some clients prepending colons to nickname
 		nickname = strings.TrimPrefix(nickname, ":")
-		for existingClient := range daemon.clients {
-			if existingClient.nickname == nickname {
+		for existingClient := range clients {
+			if *existingClient.nickname == nickname {
 				client.ReplyParts("433", "*", nickname, "Nickname is already in use")
 				return
 			}
@@ -192,7 +172,7 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 			client.ReplyParts("432", "*", cols[1], "Erroneous nickname")
 			return
 		}
-		client.nickname = nickname
+		client.nickname = &nickname
 	case "USER":
 		if len(cols) == 1 {
 			client.ReplyNotEnoughParameters("USER")
@@ -203,66 +183,69 @@ func (daemon *Daemon) ClientRegister(client *Client, command string, cols []stri
 			client.ReplyNotEnoughParameters("USER")
 			return
 		}
-		client.username = args[0]
-		client.realname = strings.TrimLeft(args[3], ":")
+		client.username = &args[0]
+		realname := strings.TrimLeft(args[3], ":")
+		client.realname = &realname
 	}
-	if client.nickname != "*" && client.username != "" {
-		if daemon.passwords != nil && *daemon.passwords != "" {
-			if client.password == "" {
+	if *client.nickname != "*" && *client.username != "" {
+		if passwords != nil && *passwords != "" {
+			if client.password == nil {
 				client.ReplyParts("462", "You may not register")
-				client.conn.Close()
+				client.Close()
 				return
 			}
-			contents, err := ioutil.ReadFile(*daemon.passwords)
+			contents, err := ioutil.ReadFile(*passwords)
 			if err != nil {
-				log.Fatalf("Can no read passwords file %s: %s", *daemon.passwords, err)
+				log.Fatalf("Can no read passwords file %s: %s", *passwords, err)
 				return
 			}
 			for _, entry := range strings.Split(string(contents), "\n") {
 				if entry == "" {
 					continue
 				}
-				if lp := strings.Split(entry, ":"); lp[0] == client.nickname && lp[1] != client.password {
+				if lp := strings.Split(entry, ":"); lp[0] == *client.nickname && lp[1] != *client.password {
 					client.ReplyParts("462", "You may not register")
-					client.conn.Close()
+					client.Close()
 					return
 				}
 			}
 		}
-
 		client.registered = true
 		client.ReplyNicknamed("001", "Hi, welcome to IRC")
-		client.ReplyNicknamed("002", "Your host is "+*daemon.hostname+", running goircd "+daemon.version)
+		client.ReplyNicknamed("002", "Your host is "+*hostname+", running goircd "+version)
 		client.ReplyNicknamed("003", "This server was created sometime")
-		client.ReplyNicknamed("004", *daemon.hostname+" goircd o o")
-		daemon.SendLusers(client)
-		daemon.SendMotd(client)
+		client.ReplyNicknamed("004", *hostname+" goircd o o")
+		SendLusers(client)
+		SendMotd(client)
 		log.Println(client, "logged in")
 	}
 }
 
 // Register new room in Daemon. Create an object, events sink, save pointers
 // to corresponding daemon's places and start room's processor goroutine.
-func (daemon *Daemon) RoomRegister(name string) (*Room, chan<- ClientEvent) {
-	roomNew := NewRoom(daemon.hostname, name, daemon.logSink, daemon.stateSink)
-	roomNew.Verbose = daemon.Verbose
+func RoomRegister(name string) (*Room, chan ClientEvent) {
+	roomNew := NewRoom(name)
 	roomSink := make(chan ClientEvent)
-	daemon.rooms[name] = roomNew
-	daemon.roomSinks[roomNew] = roomSink
+	rooms[name] = roomNew
+	roomSinks[roomNew] = roomSink
 	go roomNew.Processor(roomSink)
+	roomsGroup.Add(1)
 	return roomNew, roomSink
 }
 
-func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
+func HandlerJoin(client *Client, cmd string) {
 	args := strings.Split(cmd, " ")
-	rooms := strings.Split(args[0], ",")
+	rs := strings.Split(args[0], ",")
 	var keys []string
 	if len(args) > 1 {
 		keys = strings.Split(args[1], ",")
 	} else {
-		keys = []string{}
+		keys = make([]string, 0)
 	}
-	for n, room := range rooms {
+	var roomExisting *Room
+	var roomSink chan ClientEvent
+	var roomNew *Room
+	for n, room := range rs {
 		if !RoomNameValid(room) {
 			client.ReplyNoChannel(room)
 			continue
@@ -273,97 +256,88 @@ func (daemon *Daemon) HandlerJoin(client *Client, cmd string) {
 		} else {
 			key = ""
 		}
-		denied := false
-		joined := false
-		for roomExisting, roomSink := range daemon.roomSinks {
-			if room == roomExisting.name {
-				if (roomExisting.key != "") && (roomExisting.key != key) {
-					denied = true
-				} else {
-					roomSink <- ClientEvent{client, EventNew, ""}
-					joined = true
+		for roomExisting, roomSink = range roomSinks {
+			if room == *roomExisting.name {
+				if (roomExisting.key != nil) && (*roomExisting.key != key) {
+					goto Denied
 				}
-				break
+				roomSink <- ClientEvent{client, EventNew, ""}
+				goto Joined
 			}
 		}
-		if denied {
-			client.ReplyNicknamed("475", room, "Cannot join channel (+k) - bad key")
-		}
-		if denied || joined {
-			continue
-		}
-		roomNew, roomSink := daemon.RoomRegister(room)
+		roomNew, roomSink = RoomRegister(room)
 		log.Println("Room", roomNew, "created")
 		if key != "" {
-			roomNew.key = key
+			roomNew.key = &key
 			roomNew.StateSave()
 		}
 		roomSink <- ClientEvent{client, EventNew, ""}
+		continue
+	Denied:
+		client.ReplyNicknamed("475", room, "Cannot join channel (+k) - bad key")
+	Joined:
 	}
 }
 
-func (daemon *Daemon) Processor(events <-chan ClientEvent) {
+func Processor(events chan ClientEvent, finished chan struct{}) {
 	var now time.Time
+	go func() {
+		for {
+			time.Sleep(10 * time.Second)
+			events <- ClientEvent{eventType: EventTick}
+		}
+	}()
 	for event := range events {
 		now = time.Now()
 		client := event.client
-
-		// Check for clients aliveness
-		if daemon.lastAlivenessCheck.Add(AlivenessCheck).Before(now) {
-			for c := range daemon.clients {
-				aliveness, alive := daemon.clientAliveness[c]
-				if !alive {
-					continue
-				}
-				if aliveness.timestamp.Add(PingTimeout).Before(now) {
+		switch event.eventType {
+		case EventTick:
+			for c := range clients {
+				if c.recvTimestamp.Add(PingTimeout).Before(now) {
 					log.Println(c, "ping timeout")
-					c.conn.Close()
+					c.Close()
 					continue
 				}
-				if !aliveness.pingSent && aliveness.timestamp.Add(PingThreshold).Before(now) {
+				if c.sendTimestamp.Add(PingThreshold).Before(now) {
 					if c.registered {
-						c.Msg("PING :" + *daemon.hostname)
-						aliveness.pingSent = true
+						c.Msg("PING :" + *hostname)
+						c.sendTimestamp = time.Now()
 					} else {
 						log.Println(c, "ping timeout")
-						c.conn.Close()
+						c.Close()
 					}
 				}
 			}
-			daemon.lastAlivenessCheck = now
-		}
-
-		switch event.eventType {
-		case EventNew:
-			daemon.clients[client] = struct{}{}
-			daemon.clientAliveness[client] = &ClientAlivenessState{
-				pingSent:  false,
-				timestamp: now,
+		case EventTerm:
+			for _, sink := range roomSinks {
+				sink <- ClientEvent{eventType: EventTerm}
 			}
+			roomsGroup.Wait()
+			close(finished)
+			return
+		case EventNew:
+			clients[client] = struct{}{}
 		case EventDel:
-			delete(daemon.clients, client)
-			delete(daemon.clientAliveness, client)
-			for _, roomSink := range daemon.roomSinks {
+			delete(clients, client)
+			for _, roomSink := range roomSinks {
 				roomSink <- event
 			}
 		case EventMsg:
 			cols := strings.SplitN(event.text, " ", 2)
-			command := strings.ToUpper(cols[0])
-			if daemon.Verbose {
-				log.Println(client, "command", command)
+			cmd := strings.ToUpper(cols[0])
+			if *verbose {
+				log.Println(client, "command", cmd)
 			}
-			if command == "QUIT" {
+			if cmd == "QUIT" {
 				log.Println(client, "quit")
-				delete(daemon.clients, client)
-				delete(daemon.clientAliveness, client)
-				client.conn.Close()
+				client.Close()
 				continue
 			}
 			if !client.registered {
-				daemon.ClientRegister(client, command, cols)
+				ClientRegister(client, cmd, cols)
 				continue
 			}
-			switch command {
+			switch cmd {
 			case "AWAY":
 				if len(cols) == 1 {
 					client.away = nil
@@ -378,63 +352,63 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					client.ReplyNotEnoughParameters("JOIN")
 					continue
 				}
-				daemon.HandlerJoin(client, cols[1])
+				HandlerJoin(client, cols[1])
 			case "LIST":
-				daemon.SendList(client, cols)
+				SendList(client, cols)
 			case "LUSERS":
-				daemon.SendLusers(client)
+				SendLusers(client)
 			case "MODE":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("MODE")
 					continue
 				}
 				cols = strings.SplitN(cols[1], " ", 2)
-				if cols[0] == client.username {
+				if cols[0] == *client.username {
 					if len(cols) == 1 {
-						client.Msg("221 " + client.nickname + " +")
+						client.Msg("221 " + *client.nickname + " +")
 					} else {
 						client.ReplyNicknamed("501", "Unknown MODE flag")
 					}
 					continue
 				}
 				room := cols[0]
-				r, found := daemon.rooms[room]
+				r, found := rooms[room]
 				if !found {
 					client.ReplyNoChannel(room)
 					continue
 				}
 				if len(cols) == 1 {
-					daemon.roomSinks[r] <- ClientEvent{client, EventMode, ""}
+					roomSinks[r] <- ClientEvent{client, EventMode, ""}
 				} else {
-					daemon.roomSinks[r] <- ClientEvent{client, EventMode, cols[1]}
+					roomSinks[r] <- ClientEvent{client, EventMode, cols[1]}
 				}
 			case "MOTD":
-				go daemon.SendMotd(client)
+				SendMotd(client)
 			case "PART":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("PART")
 					continue
 				}
-				rooms := strings.Split(cols[1], " ")[0]
-				for _, room := range strings.Split(rooms, ",") {
-					r, found := daemon.rooms[room]
-					if !found {
+				rs := strings.Split(cols[1], " ")[0]
+				for _, room := range strings.Split(rs, ",") {
+					if r, found := rooms[room]; found {
+						roomSinks[r] <- ClientEvent{client, EventDel, ""}
+					} else {
 						client.ReplyNoChannel(room)
 						continue
 					}
-					daemon.roomSinks[r] <- ClientEvent{client, EventDel, ""}
 				}
 			case "PING":
 				if len(cols) == 1 {
 					client.ReplyNicknamed("409", "No origin specified")
 					continue
 				}
-				client.Reply(fmt.Sprintf("PONG %s :%s", *daemon.hostname, cols[1]))
+				client.Reply(fmt.Sprintf("PONG %s :%s", *hostname, cols[1]))
 			case "PONG":
 				continue
 			case "NOTICE", "PRIVMSG":
 				if len(cols) == 1 {
-					client.ReplyNicknamed("411", "No recipient given ("+command+")")
+					client.ReplyNicknamed("411", "No recipient given ("+cmd+")")
 					continue
 				}
 				cols = strings.SplitN(cols[1], " ", 2)
@@ -444,12 +418,12 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				}
 				msg := ""
 				target := strings.ToLower(cols[0])
-				for c := range daemon.clients {
-					if c.nickname == target {
-						msg = fmt.Sprintf(":%s %s %s %s", client, command, c.nickname, cols[1])
+				for c := range clients {
+					if *c.nickname == target {
+						msg = fmt.Sprintf(":%s %s %s %s", client, cmd, *c.nickname, cols[1])
 						c.Msg(msg)
 						if c.away != nil {
-							client.ReplyNicknamed("301", c.nickname, *c.away)
+							client.ReplyNicknamed("301", *c.nickname, *c.away)
 						}
 						break
 					}
@@ -457,15 +431,14 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				if msg != "" {
 					continue
 				}
-				r, found := daemon.rooms[target]
-				if !found {
+				if r, found := rooms[target]; found {
+					roomSinks[r] <- ClientEvent{
+						client,
+						EventMsg,
+						cmd + " " + strings.TrimLeft(cols[1], ":"),
+					}
+				} else {
 					client.ReplyNoNickChan(target)
-					continue
-				}
-				daemon.roomSinks[r] <- ClientEvent{
-					client,
-					EventMsg,
-					command + " " + strings.TrimLeft(cols[1], ":"),
 				}
 			case "TOPIC":
 				if len(cols) == 1 {
@@ -473,7 +446,7 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 					continue
 				}
 				cols = strings.SplitN(cols[1], " ", 2)
-				r, found := daemon.rooms[cols[0]]
+				r, found := rooms[cols[0]]
 				if !found {
 					client.ReplyNoChannel(cols[0])
 					continue
@@ -484,19 +457,18 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				} else {
 					change = ""
 				}
-				daemon.roomSinks[r] <- ClientEvent{client, EventTopic, change}
+				roomSinks[r] <- ClientEvent{client, EventTopic, change}
 			case "WHO":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("WHO")
 					continue
 				}
 				room := strings.Split(cols[1], " ")[0]
-				r, found := daemon.rooms[room]
-				if !found {
+				if r, found := rooms[room]; found {
+					roomSinks[r] <- ClientEvent{client, EventWho, ""}
+				} else {
 					client.ReplyNoChannel(room)
-					continue
 				}
-				daemon.roomSinks[r] <- ClientEvent{client, EventWho, ""}
 			case "WHOIS":
 				if len(cols) == 1 || len(cols[1]) < 1 {
 					client.ReplyNotEnoughParameters("WHOIS")
@@ -504,22 +476,21 @@ func (daemon *Daemon) Processor(events <-chan ClientEvent) {
 				}
 				cols := strings.Split(cols[1], " ")
 				nicknames := strings.Split(cols[len(cols)-1], ",")
-				daemon.SendWhois(client, nicknames)
+				SendWhois(client, nicknames)
 			case "VERSION":
 				var debug string
-				if daemon.Verbose {
+				if *verbose {
 					debug = "debug"
 				} else {
 					debug = ""
 				}
-				client.ReplyNicknamed("351", fmt.Sprintf("%s.%s %s :", daemon.version, debug, *daemon.hostname))
+				client.ReplyNicknamed("351", fmt.Sprintf("%s.%s %s :", version, debug, *hostname))
 			default:
-				client.ReplyNicknamed("421", command, "Unknown command")
+				client.ReplyNicknamed("421", cmd, "Unknown command")
 			}
 		}
-		if aliveness, alive := daemon.clientAliveness[client]; alive {
-			aliveness.timestamp = now
-			aliveness.pingSent = false
+		if client != nil {
+			client.recvTimestamp = now
 		}
 	}
 }

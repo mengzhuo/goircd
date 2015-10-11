@@ -27,21 +27,24 @@ import (
 
 func TestRegistrationWorkflow(t *testing.T) {
 	host := "foohost"
-	daemon := NewDaemon("ver1", &host, nil, nil, nil, nil)
+	hostname = &host
 	events := make(chan ClientEvent)
-	go daemon.Processor(events)
+	defer func() {
+		events <- ClientEvent{eventType: EventTerm}
+	}()
+	go Processor(events, make(chan struct{}))
 	conn := NewTestingConn()
-	client := NewClient(&host, conn)
+	client := NewClient(conn)
 	go client.Processor(events)
 
-	conn.inbound <- "UNEXISTENT CMD" // should recieve nothing on this
+	conn.inbound <- "UNEXISTENT CMD" // should receive nothing on this
 	conn.inbound <- "NICK"
 
 	if r := <-conn.outbound; r != ":foohost 431 :No nickname given\r\n" {
 		t.Fatal("431 for NICK", r)
 	}
 
-	for _, n := range []string{"привет", " foo", "longlonglong", "#foo", "mein nick", "foo_bar"} {
+	for _, n := range []string{"привет", " foo", "#foo", "mein nick", "foo_bar"} {
 		conn.inbound <- "NICK " + n
 		if r := <-conn.outbound; r != ":foohost 432 * "+n+" :Erroneous nickname\r\n" {
 			t.Fatal("nickname validation", r)
@@ -52,7 +55,7 @@ func TestRegistrationWorkflow(t *testing.T) {
 	if r := <-conn.outbound; r != ":foohost 461 meinick USER :Not enough parameters\r\n" {
 		t.Fatal("461 for USER", r)
 	}
-	if (client.nickname != "meinick") || client.registered {
+	if (*client.nickname != "meinick") || client.registered {
 		t.Fatal("NICK saved")
 	}
 
@@ -61,7 +64,7 @@ func TestRegistrationWorkflow(t *testing.T) {
 		t.Fatal("461 again for USER", r)
 	}
 
-	daemon.SendLusers(client)
+	SendLusers(client)
 	if r := <-conn.outbound; !strings.Contains(r, "There are 0 users") {
 		t.Fatal("LUSERS", r)
 	}
@@ -85,7 +88,7 @@ func TestRegistrationWorkflow(t *testing.T) {
 	if r := <-conn.outbound; !strings.Contains(r, ":foohost 422") {
 		t.Fatal("422 after registration", r)
 	}
-	if (client.username != "1") || (client.realname != "4 5") || !client.registered {
+	if (*client.username != "1") || (*client.realname != "4 5") || !client.registered {
 		t.Fatal("client register")
 	}
 
@@ -96,7 +99,7 @@ func TestRegistrationWorkflow(t *testing.T) {
 		t.Fatal("reply for unexistent command", r)
 	}
 
-	daemon.SendLusers(client)
+	SendLusers(client)
 	if r := <-conn.outbound; !strings.Contains(r, "There are 1 users") {
 		t.Fatal("1 users logged in", r)
 	}
@@ -107,10 +110,6 @@ func TestRegistrationWorkflow(t *testing.T) {
 	}
 
 	conn.inbound <- "QUIT\r\nUNEXISTENT CMD"
-	<-conn.outbound
-	if !conn.closed {
-		t.Fatal("closed connection on QUIT")
-	}
 }
 
 func TestMotd(t *testing.T) {
@@ -123,11 +122,12 @@ func TestMotd(t *testing.T) {
 
 	conn := NewTestingConn()
 	host := "foohost"
-	client := NewClient(&host, conn)
+	hostname = &host
+	client := NewClient(conn)
 	motdName := fd.Name()
-	daemon := NewDaemon("ver1", &host, &motdName, nil, nil, nil)
+	motd = &motdName
 
-	daemon.SendMotd(client)
+	SendMotd(client)
 	if r := <-conn.outbound; !strings.HasPrefix(r, ":foohost 375") {
 		t.Fatal("MOTD start", r)
 	}
