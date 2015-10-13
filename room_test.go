@@ -222,7 +222,7 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":nick2!foo2@someclient MODE #barenc -k\r\n" {
 		t.Fatal("remove #barenc key", r)
 	}
-	if rooms["#barenc"].key != nil {
+	if *rooms["#barenc"].key != "" {
 		t.Fatal("removing key from #barenc")
 	}
 	if r := <-logSink; (r.what != "removed channel key") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {

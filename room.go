@@ -53,9 +53,11 @@ func (room Room) String() string {
 
 func NewRoom(name string) *Room {
 	topic := ""
+	key := ""
 	return &Room{
 		name:    &name,
 		topic:   &topic,
+		key:     &key,
 		members: make(map[*Client]struct{}),
 	}
 }
@@ -79,11 +81,7 @@ func (room *Room) Broadcast(msg string, clientToIgnore ...*Client) {
 }
 
 func (room *Room) StateSave() {
-	var key string
-	if room.key != nil {
-		key = *room.key
-	}
-	stateSink <- StateEvent{*room.name, *room.topic, key}
+	stateSink <- StateEvent{*room.name, *room.topic, *room.key}
 }
 
 func (room *Room) Processor(events <-chan ClientEvent) {
@@ -155,7 +153,7 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 		case EventMode:
 			if event.text == "" {
 				mode := "+"
-				if room.key != nil {
+				if *room.key != "" {
 					mode = mode + "k"
 				}
 				client.Msg(fmt.Sprintf("324 %s %s %s", *client.nickname, *room.name, mode))
@@ -186,7 +184,8 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 				msg = fmt.Sprintf(":%s MODE %s +k %s", client, *room.name, *room.key)
 				msgLog = "set channel key to " + *room.key
 			} else {
-				room.key = nil
+				key := ""
+				room.key = &key
 				msg = fmt.Sprintf(":%s MODE %s -k", client, *room.name)
 				msgLog = "removed channel key"
 			}

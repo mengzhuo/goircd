@@ -258,7 +258,7 @@ func HandlerJoin(client *Client, cmd string) {
 		}
 		for roomExisting, roomSink = range roomSinks {
 			if room == *roomExisting.name {
-				if (roomExisting.key != nil) && (*roomExisting.key != key) {
+				if (*roomExisting.key != "") && (*roomExisting.key != key) {
 					goto Denied
 				}
 				roomSink <- ClientEvent{client, EventNew, ""}
