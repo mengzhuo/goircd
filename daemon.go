@@ -67,7 +67,7 @@ func SendMotd(client *Client) {
 		return
 	}
 	client.ReplyNicknamed("375", "- "+*hostname+" Message of the day -")
-	for _, s := range strings.Split(strings.Trim(string(motdText), "\n"), "\n") {
+	for _, s := range strings.Split(strings.TrimSuffix(string(motdText), "\n"), "\n") {
 		client.ReplyNicknamed("372", "- "+s)
 	}
 	client.ReplyNicknamed("376", "End of /MOTD command")
