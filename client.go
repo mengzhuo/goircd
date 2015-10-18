@@ -51,8 +51,19 @@ type Client struct {
 	sync.Mutex
 }
 
+func (c Client) Host() string {
+	addr := c.conn.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		addr = host
+	}
+	if domains, err := net.LookupAddr(addr); err == nil {
+		addr = strings.TrimSuffix(domains[0], ".")
+	}
+	return addr
+}
+
 func (c Client) String() string {
-	return *c.nickname + "!" + *c.username + "@" + c.conn.RemoteAddr().String()
+	return *c.nickname + "!" + *c.username + "@" + c.Host()
 }
 
 func NewClient(conn net.Conn) *Client {

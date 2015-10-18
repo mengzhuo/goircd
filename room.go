@@ -142,7 +142,7 @@ func (room *Room) Processor(events <-chan ClientEvent) {
 					"352",
 					*room.name,
 					*m.username,
-					m.conn.RemoteAddr().String(),
+					m.Host(),
 					*hostname,
 					*m.nickname,
 					"H",
