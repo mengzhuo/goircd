@@ -46,7 +46,7 @@ type Client struct {
 	away          *string
 	recvTimestamp time.Time
 	sendTimestamp time.Time
-	outBuf        chan string
+	outBuf        chan *string
 	alive         bool
 	sync.Mutex
 }
@@ -76,20 +76,19 @@ func NewClient(conn net.Conn) *Client {
 		recvTimestamp: time.Now(),
 		sendTimestamp: time.Now(),
 		alive:         true,
-		outBuf:        make(chan string, MaxOutBuf),
+		outBuf:        make(chan *string, MaxOutBuf),
 	}
 	go c.MsgSender()
 	return &c
 }
 
 func (c *Client) SetDead() {
-	close(c.outBuf)
+	c.outBuf <- nil
 	c.alive = false
 }
 
 func (c *Client) Close() {
 	c.Lock()
-	c.conn.Close()
 	if c.alive {
 		c.SetDead()
 	}
@@ -133,7 +132,11 @@ func (c *Client) Processor(sink chan ClientEvent) {
 
 func (c *Client) MsgSender() {
 	for msg := range c.outBuf {
-		c.conn.Write(append([]byte(msg), CRLF...))
+		if msg == nil {
+			c.conn.Close()
+			break
+		}
+		c.conn.Write(append([]byte(*msg), CRLF...))
 	}
 }
 
@@ -146,11 +149,12 @@ func (c *Client) Msg(text string) {
 	}
 	if len(c.outBuf) == MaxOutBuf {
 		log.Println(c, "output buffer size exceeded, kicking him")
-		go c.Close()
-		c.SetDead()
+		if c.alive {
+			c.SetDead()
+		}
 		return
 	}
-	c.outBuf <- text
+	c.outBuf <- &text
 }
 
 // Send message from server. It has ": servername" prefix.
