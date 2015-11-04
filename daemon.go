@@ -308,6 +308,14 @@ func Processor(events chan ClientEvent, finished chan struct{}) {
 					}
 				}
 			}
+			for rn, r := range rooms {
+				if *statedir == "" && len(r.members) == 0 {
+					log.Println(rn, "emptied room")
+					delete(rooms, rn)
+					close(roomSinks[r])
+					delete(roomSinks, r)
+				}
+			}
 		case EventTerm:
 			for _, sink := range roomSinks {
 				sink <- ClientEvent{eventType: EventTerm}
