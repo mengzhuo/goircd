@@ -162,6 +162,7 @@ func ClientRegister(client *Client, cmd string, cols []string) {
 		nickname := cols[1]
 		// Compatibility with some clients prepending colons to nickname
 		nickname = strings.TrimPrefix(nickname, ":")
+		nickname = strings.ToLower(nickname)
 		for existingClient := range clients {
 			if *existingClient.nickname == nickname {
 				client.ReplyParts("433", "*", nickname, "Nickname is already in use")
