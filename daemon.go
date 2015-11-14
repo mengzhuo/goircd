@@ -486,6 +486,22 @@ func Processor(events chan ClientEvent, finished chan struct{}) {
 				cols := strings.Split(cols[1], " ")
 				nicknames := strings.Split(cols[len(cols)-1], ",")
 				SendWhois(client, nicknames)
+			case "ISON":
+				if len(cols) == 1 || len(cols[1]) < 1 {
+					client.ReplyNotEnoughParameters("ISON")
+					continue
+				}
+				nicksKnown := make(map[string]struct{})
+				for c := range clients {
+					nicksKnown[*c.nickname] = struct{}{}
+				}
+				var nicksExists []string
+				for _, nickname := range strings.Split(cols[1], " ") {
+					if _, exists := nicksKnown[nickname]; exists {
+						nicksExists = append(nicksExists, nickname)
+					}
+				}
+				client.ReplyNicknamed("303", strings.Join(nicksExists, " "))
 			case "VERSION":
 				var debug string
 				if *verbose {

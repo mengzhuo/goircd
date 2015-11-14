@@ -4,7 +4,7 @@
 DESCRIPTION
 
 goircd is very simple IRC server, written on Go.
-It is heavily inspired by miniircd daemon written on Python.
+It was heavily inspired by miniircd daemon written on Python.
 GoVPN is free software: see the file COPYING for copying conditions.
 It does not aim to replace full featured mass scalable IRC networks:
 
@@ -35,7 +35,7 @@ SUPPORTED IRC COMMANDS
 
 * PASS/NICK/USER during registration workflow
 * PING/PONGs
-* NOTICE/PRIVMSG
+* NOTICE/PRIVMSG, ISON
 * AWAY, MOTD, LUSERS, WHO, WHOIS, VERSION, QUIT
 * LIST, JOIN, TOPIC, +k/-k channel MODE
 
