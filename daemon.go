@@ -346,6 +346,9 @@ func Processor(events chan ClientEvent, finished chan struct{}) {
 				ClientRegister(client, cmd, cols)
 				continue
 			}
+			if client != nil {
+				client.recvTimestamp = now
+			}
 			switch cmd {
 			case "AWAY":
 				if len(cols) == 1 {
@@ -513,9 +516,6 @@ func Processor(events chan ClientEvent, finished chan struct{}) {
 			default:
 				client.ReplyNicknamed("421", cmd, "Unknown command")
 			}
-		}
-		if client != nil {
-			client.recvTimestamp = now
 		}
 	}
 }
