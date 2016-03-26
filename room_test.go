@@ -47,9 +47,11 @@ func TestTwoUsers(t *testing.T) {
 	host := "foohost"
 	hostname = &host
 	events := make(chan ClientEvent)
+	roomsM.Lock()
 	rooms = make(map[string]*Room)
-	clients = make(map[*Client]struct{})
 	roomSinks = make(map[*Room]chan ClientEvent)
+	roomsM.Unlock()
+	clients = make(map[*Client]struct{})
 	finished := make(chan struct{})
 	go Processor(events, finished)
 	defer func() {
@@ -182,12 +184,14 @@ func TestJoin(t *testing.T) {
 	for i := 0; i < 4*2; i++ {
 		<-conn.outbound
 	}
+	roomsM.RLock()
 	if _, ok := rooms["#bar"]; !ok {
 		t.Fatal("#bar does not exist")
 	}
 	if _, ok := rooms["#baz"]; !ok {
 		t.Fatal("#baz does not exist")
 	}
+	roomsM.RUnlock()
 	if r := <-logSink; (r.what != "joined") || (r.where != "#bar") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event #bar", r)
 	}
@@ -199,12 +203,14 @@ func TestJoin(t *testing.T) {
 	for i := 0; i < 4*2; i++ {
 		<-conn.outbound
 	}
+	roomsM.RLock()
 	if *rooms["#barenc"].key != "key1" {
 		t.Fatal("no room with key1")
 	}
 	if *rooms["#bazenc"].key != "key2" {
 		t.Fatal("no room with key2")
 	}
+	roomsM.RUnlock()
 	if r := <-logSink; (r.what != "joined") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("invalid join log event #barenc", r)
 	}
@@ -222,9 +228,11 @@ func TestJoin(t *testing.T) {
 	if r := <-conn.outbound; r != ":nick2!foo2@someclient MODE #barenc -k\r\n" {
 		t.Fatal("remove #barenc key", r)
 	}
+	roomsM.RLock()
 	if *rooms["#barenc"].key != "" {
 		t.Fatal("removing key from #barenc")
 	}
+	roomsM.RUnlock()
 	if r := <-logSink; (r.what != "removed channel key") || (r.where != "#barenc") || (r.who != "nick2") || (r.meta != true) {
 		t.Fatal("removed channel key log", r)
 	}
