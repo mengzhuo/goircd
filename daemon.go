@@ -167,7 +167,8 @@ func ClientRegister(client *Client, cmd string, cols []string) {
 			client.ReplyNotEnoughParameters("PASS")
 			return
 		}
-		client.password = &cols[1]
+		password := strings.TrimPrefix(cols[1], ":")
+		client.password = &password
 	case "NICK":
 		if len(cols) == 1 || len(cols[1]) < 1 {
 			client.ReplyParts("431", "No nickname given")
