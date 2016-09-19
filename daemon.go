@@ -445,9 +445,7 @@ func Processor(events chan ClientEvent, finished chan struct{}) {
 					if r, found := rooms[room]; found {
 						roomSinks[r] <- ClientEvent{client, EventDel, ""}
 					} else {
-						roomsM.RUnlock()
 						client.ReplyNoChannel(room)
-						continue
 					}
 				}
 				roomsM.RUnlock()
