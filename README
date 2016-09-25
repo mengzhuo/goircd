@@ -5,7 +5,7 @@ DESCRIPTION
 
 goircd is very simple IRC server, written on Go.
 It was heavily inspired by miniircd daemon written on Python.
-GoVPN is free software: see the file COPYING for copying conditions.
+goircd is free software: see the file COPYING for copying conditions.
 It does not aim to replace full featured mass scalable IRC networks:
 
 * It can not connect to other servers. Just standalone installation
