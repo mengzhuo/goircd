@@ -1,0 +1,11 @@
+[Unit]
+Description=goIRC daemon
+
+[Service]
+ExecStart=/usr/local/bin/goircd -logdir /var/lib/goircd/history 
+Restart=once
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
+Alias=goircd.service
