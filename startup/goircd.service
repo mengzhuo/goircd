@@ -2,7 +2,7 @@
 Description=goIRC daemon
 
 [Service]
-ExecStart=/usr/local/bin/goircd -logdir /var/lib/goircd/history 
+ExecStart=/usr/local/bin/goircd -logdir /var/log/goircd/
 Restart=once
 RestartSec=3s
 

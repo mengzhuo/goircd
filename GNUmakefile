@@ -7,7 +7,7 @@ include common.mk
 deb:
 	rm -rf ${BUILD_TMP}
 	mkdir -p ${BUILD_TMP}/usr/local/bin/
-	mkdir -p ${BUILD_TMP}/var/lib/goircd/history
+	mkdir -p ${BUILD_TMP}/var/log/goircd
 	mkdir -p ${BUILD_TMP}/etc/systemd/system/
 	cp goircd ${BUILD_TMP}/usr/local/bin/
 	cp startup/goircd.service ${BUILD_TMP}/etc/systemd/system/

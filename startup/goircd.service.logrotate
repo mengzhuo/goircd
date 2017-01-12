@@ -1,0 +1,10 @@
+/var/log/goircd/*.log {
+  rotate 30
+  dateext
+  daily
+  delaycompress
+  missingok
+  notifempty
+
+  compressoptions -9
+}
